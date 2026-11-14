@@ -8,7 +8,7 @@
 // Checkout Session).
 
 import { query } from './db'
-import { sendEmail, SITE_URL } from './email'
+import { sendEmail, inquiryTo, SITE_URL } from './email'
 
 export const hasStripe = () => Boolean(process.env.STRIPE_SECRET_KEY)
 
@@ -145,7 +145,7 @@ export async function recordSession(sessionId: string): Promise<Order | null> {
     email &&
       sendEmail({
         to: [email],
-        reply_to: process.env.INQUIRY_TO,
+        reply_to: inquiryTo()[0],
         subject: `Your tickets: ${ev?.title ?? 'Sunset Village'}`,
         text: [
           `Hi${name ? ` ${name.split(' ')[0]}` : ''},`,
@@ -160,9 +160,9 @@ export async function recordSession(sessionId: string): Promise<Order | null> {
           '(N Judah to 46th Avenue)',
         ].join('\n'),
       }),
-    process.env.INQUIRY_TO &&
+    inquiryTo().length > 0 &&
       sendEmail({
-        to: [process.env.INQUIRY_TO],
+        to: inquiryTo(),
         subject: `Ticket sale: ${tix} for ${ev?.title ?? eventId}`,
         text: `${name ?? '(no name)'} <${email}> bought ${tix} for ${what}. ${dollars(s.amount_total)}.\n\nDoor list: ${SITE_URL}/admin/tickets`,
       }),

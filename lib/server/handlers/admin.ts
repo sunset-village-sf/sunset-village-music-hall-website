@@ -21,6 +21,7 @@ import {
 import { hasStripe } from '../stripe'
 import {
   hasEmail,
+  inquiryTo,
   sendEmail,
   sendBatch,
   announcementHtml,
@@ -316,7 +317,7 @@ async function sendAnnouncement(b: Body) {
   const body = need(opt(b.body, 20000), 'Message')
 
   if (b.test) {
-    const to = opt(b.testTo, 200) ?? process.env.INQUIRY_TO ?? ''
+    const to = opt(b.testTo, 200) ?? inquiryTo()[0] ?? ''
     if (!isEmail(to)) throw new BadRequest('Enter an email address to send the test to')
     const unsub = unsubscribeUrl('test-preview')
     const ok = await sendEmail({
@@ -391,10 +392,10 @@ export default async function handler(req: VercelReq, res: VercelRes) {
       return ok({
         admin: me,
         email: hasEmail(),
-        notifications: hasEmail() && Boolean(process.env.INQUIRY_TO),
+        notifications: hasEmail() && inquiryTo().length > 0,
         uploads: hasBlob(),
         payments: hasStripe(),
-        backups: Boolean(process.env.CRON_SECRET) && hasEmail() && Boolean(process.env.INQUIRY_TO),
+        backups: Boolean(process.env.CRON_SECRET) && hasEmail() && inquiryTo().length > 0,
         newBookings: n,
         // Still signing in with the shared setup password: nudge them to pick their own.
         usingSetupPassword: checkPassword(

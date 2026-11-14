@@ -5,7 +5,7 @@
 // The list lives only in this site's database; Resend is used just to send.
 
 import { query, hasDb } from '../db'
-import { sendEmail, hasEmail, emailFont } from '../email'
+import { sendEmail, hasEmail, emailFont, inquiryTo } from '../email'
 import tokens from '@/lib/tokens.json'
 import { str, isEmail, type VercelReq, type VercelRes } from '../http'
 
@@ -51,9 +51,9 @@ export default async function handler(req: VercelReq, res: VercelRes) {
   const emailed =
     !saved &&
     hasEmail() &&
-    Boolean(process.env.INQUIRY_TO) &&
+    inquiryTo().length > 0 &&
     (await sendEmail({
-      to: [process.env.INQUIRY_TO!],
+      to: inquiryTo(),
       subject: `Newsletter signup (not saved, add it in the admin) — ${email}`,
       text: `The website couldn't save this newsletter signup to the database, so here it is by email.\n\nAdd it under Newsletter in https://sunsetvillagesf.com/admin:\n\n${email}`,
     }))
