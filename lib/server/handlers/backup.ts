@@ -5,7 +5,7 @@
 // CRON_SECRET; anything else is refused.
 
 import { query, hasDb } from '../db'
-import { hasEmail } from '../email'
+import { hasEmail, inquiryTo } from '../email'
 import { header, type VercelReq, type VercelRes } from '../http'
 
 const cell = (v: unknown) => {
@@ -21,7 +21,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
   if (!secret || header(req, 'authorization') !== `Bearer ${secret}`) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
-  if (!hasDb() || !hasEmail() || !process.env.INQUIRY_TO) {
+  if (!hasDb() || !hasEmail() || !inquiryTo().length) {
     return res.status(503).json({ error: 'Not configured' })
   }
 
@@ -41,7 +41,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
     headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       from: process.env.INQUIRY_FROM,
-      to: [process.env.INQUIRY_TO],
+      to: inquiryTo(),
       subject: `Sunset Village weekly backup — ${day}`,
       text: [
         'Your weekly backup of the website records is attached. You don’t need to do anything;',

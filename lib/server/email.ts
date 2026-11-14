@@ -14,6 +14,13 @@ export const emailFont = "'Bricolage Grotesque', Helvetica, Arial, sans-serif"
 
 export const hasEmail = () => Boolean(process.env.RESEND_API_KEY && process.env.INQUIRY_FROM)
 
+/** Team inbox(es) for alerts and backups: INQUIRY_TO, one address or several separated by commas. */
+export const inquiryTo = () =>
+  (process.env.INQUIRY_TO ?? '')
+    .split(',')
+    .map((a) => a.trim())
+    .filter(Boolean)
+
 export interface Email {
   to: string[]
   subject: string
