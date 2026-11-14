@@ -15,6 +15,7 @@ import { Sparkle } from '@/components/brand/sparkle'
 import { Field, fieldGrid as grid } from '@/components/site/form-field'
 import { site } from '@/lib/data/site'
 import { postJson } from '@/lib/post'
+import { useSpamGuard } from '@/components/site/spam-guard'
 
 const EVENT_TYPES = [
   'Concert or show',
@@ -45,6 +46,7 @@ type Values = z.input<typeof schema>
 
 export function BookingForm() {
   const [status, setStatus] = useState<'idle' | 'error' | 'sent'>('idle')
+  const guard = useSpamGuard()
   const {
     register,
     control,
@@ -93,7 +95,8 @@ export function BookingForm() {
       className="flex flex-col gap-5"
       onSubmit={handleSubmit(async (v) => {
         setStatus('idle')
-        const ok = await postJson('/api/inquiry', { ...v, headcount: String(v.headcount) })
+        const ok = await postJson('/api/inquiry', { ...v, headcount: String(v.headcount), ...guard.payload() })
+        guard.reset()
         setStatus(ok ? 'sent' : 'error')
       })}
     >
@@ -194,6 +197,8 @@ export function BookingForm() {
           Something went wrong sending your request. Please try again in a moment.
         </Alert>
       )}
+
+      {guard.fields}
 
       <Button type="submit" variant="sun" size="lg" className="self-end" disabled={isSubmitting}>
         {isSubmitting ? 'Sending…' : 'Send request →'}

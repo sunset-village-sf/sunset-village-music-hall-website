@@ -4,11 +4,13 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { postJson } from '@/lib/post'
+import { useSpamGuard } from './spam-guard'
 
 /** Built-in signup (subscribers live in this site's database). Sits on the sun band. */
 export function NewsletterSignup() {
   const [state, setState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
   const [email, setEmail] = useState('')
+  const guard = useSpamGuard()
 
   if (state === 'done') {
     return (
@@ -24,7 +26,8 @@ export function NewsletterSignup() {
       onSubmit={async (e) => {
         e.preventDefault()
         setState('sending')
-        const ok = await postJson('/api/newsletter', { email })
+        const ok = await postJson('/api/newsletter', { email, ...guard.payload() })
+        guard.reset()
         setState(ok ? 'done' : 'error')
       }}
     >
@@ -46,6 +49,7 @@ export function NewsletterSignup() {
           {state === 'sending' ? 'Signing up…' : 'Sign up'}
         </Button>
       </div>
+      {guard.fields}
       {state === 'error' && (
         <p role="alert" className="font-semibold">
           That didn’t go through. Check the address and try again.
