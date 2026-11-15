@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { getJson, postJson } from '@/lib/admin/api'
 import { useLoad } from '@/lib/admin/use-load'
 import { dollars, eventHref, past as pastEvents, upcoming as upcomingEvents } from '@/lib/events'
-import type { VillageEvent } from '@/lib/data/events'
+import { DISPLAY_PLACES, showsOn, type VillageEvent } from '@/lib/data/events'
 import { categoryLabel } from '@/components/brand/categories'
 import { useAdmin } from '@/components/internal/admin-shell'
 import { EmptyState, ErrorNote, Mono, PageHeader, Panel } from '@/components/internal/internal-ui'
@@ -32,6 +32,11 @@ function Row({ e, onEdit, onCopy }: { e: VillageEvent; onEdit: () => void; onCop
           <Badge tone={TONE[cat]} size="sm">
             {categoryLabel[cat]}
           </Badge>
+          {DISPLAY_PLACES.filter((p) => !showsOn(e, p.id)).map((p) => (
+            <Badge key={p.id} tone="paper" size="sm">
+              {p.off}
+            </Badge>
+          ))}
         </div>
         <div className="truncate text-meta text-ink-2">
           {[e.time, e.venue, e.ticketPrice ? `Online tickets ${dollars(e.ticketPrice)}` : e.ticketUrl ? 'Tickets link' : e.price]

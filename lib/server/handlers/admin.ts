@@ -32,6 +32,7 @@ import {
   type Email,
 } from '../email'
 import { str, opt, clientIp, isEmail, type VercelReq, type VercelRes } from '../http'
+import { ALL_PLACES, showsOn, type DisplayPlace, type VillageEvent } from '@/lib/data/events'
 
 type Body = Record<string, any>
 
@@ -184,6 +185,12 @@ const TIME = /^([01]\d|2[0-3]):[0-5]\d$/ // 24h "HH:MM"
 const CATEGORIES = ['music', 'dj', 'community', 'workshop']
 const FILLS = ['fog', 'sun', 'yellow', 'teal', 'pink']
 
+/** Known places only, in a stable order. Not sent (older admin page) → everywhere. */
+function cleanDisplay(v: unknown): DisplayPlace[] {
+  if (!Array.isArray(v)) return ALL_PLACES
+  return ALL_PLACES.filter((p) => v.includes(p))
+}
+
 async function saveEvent(b: Body) {
   const date = need(opt(b.date, 10), 'Date')
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new BadRequest('Date must look like 2026-10-31')
@@ -222,13 +229,14 @@ async function saveEvent(b: Body) {
     opt(b.cta, 40),
     startTime,
     endTime,
+    cleanDisplay(b.display),
   ]
   // Existing events keep their id so their /events/<id> link never breaks.
   if (b.id) {
     const rows = await query(
       `update events set title=$2, date=$3, time=$4, venue=$5, summary=$6, details=$7, price=$8,
          ticket_url=$9, flyer=$10, ticket_price_cents=$11, capacity=$12, category=$13, kind=$14, subtitle=$15,
-         cta=$16, start_time=$17, end_time=$18, sample=false, updated_at=now() where id=$1 returning *`,
+         cta=$16, start_time=$17, end_time=$18, display=$19, sample=false, updated_at=now() where id=$1 returning *`,
       [str(b.id), ...fields],
     )
     if (!rows.length) throw new BadRequest('That event no longer exists')
@@ -237,8 +245,8 @@ async function saveEvent(b: Body) {
   const id = await uniqueId('events', slugify(`${title} ${date.slice(5)}`))
   const rows = await query(
     `insert into events (id, title, date, time, venue, summary, details, price, ticket_url, flyer, ticket_price_cents, capacity,
-       category, kind, subtitle, cta, start_time, end_time)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) returning *`,
+       category, kind, subtitle, cta, start_time, end_time, display)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) returning *`,
     [id, ...fields],
   )
   return withCalendar(rows[0])
@@ -261,19 +269,25 @@ const toCalendar = (r: Record<string, any>) => ({
   ticketUrl: r.ticket_url,
 })
 
+/** Put the event on Google Calendar, or take it off if it isn't marked for the calendar. */
+const pushToCalendar = (row: Record<string, any>) =>
+  showsOn(eventFromRow(row) as VillageEvent, 'calendar')
+    ? upsertCalendarEvent(toCalendar(row))
+    : deleteCalendarEvent(row.id)
+
 /** Saved event plus whether Google Calendar took the change ('off' when not set up). */
 async function withCalendar(row: Record<string, any>) {
-  const calendar = hasCalendar() ? ((await upsertCalendarEvent(toCalendar(row))) ? 'synced' : 'failed') : 'off'
+  const calendar = hasCalendar() ? ((await pushToCalendar(row)) ? 'synced' : 'failed') : 'off'
   return { ...eventFromRow(row), calendar }
 }
 
-/** Re-send every upcoming event: first-time setup, or catching up after Google was unreachable. */
+/** Re-send every upcoming event (and remove ones not marked for the calendar): first-time setup, or catching up after Google was unreachable. */
 async function syncCalendar() {
   if (!hasCalendar()) throw new BadRequest('Google Calendar isn’t set up yet')
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' })
   const rows = await query(`select * from events where date >= $1 order by date`, [today])
   let synced = 0
-  for (const r of rows) if (await upsertCalendarEvent(toCalendar(r))) synced++
+  for (const r of rows) if (await pushToCalendar(r)) synced++
   return { synced, total: rows.length }
 }
 

@@ -6,7 +6,7 @@
 import 'server-only'
 import { query, hasDb, eventFromRow, tenantFromRow, getSettings } from './db'
 import { hasStripe, soldByEvent } from './stripe'
-import { events as seedEvents, type VillageEvent } from '@/lib/data/events'
+import { events as seedEvents, showsOn, type VillageEvent } from '@/lib/data/events'
 import { tenants as seedTenants, type Tenant } from '@/lib/data/tenants'
 import { sampleEvents } from '@/lib/data/sample-events'
 
@@ -41,7 +41,10 @@ export async function loadContent(): Promise<Content> {
       getSettings(),
     ])
     return {
-      events: events.map((r) => withTickets(eventFromRow(r), sold) as VillageEvent),
+      events: events
+        .map((r) => eventFromRow(r) as VillageEvent)
+        .filter((e) => showsOn(e, 'website'))
+        .map((e) => withTickets(e, sold) as VillageEvent),
       tenants: tenants.map((r) => tenantFromRow(r) as Tenant),
       bookingFormUrl: settings.booking_form_url ?? null,
     }

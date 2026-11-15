@@ -9,6 +9,7 @@
 import { query, hasDb } from '../db'
 import { hasStripe, createCheckout, recordSession, seatsTaken, type TicketEvent } from '../stripe'
 import { str, type VercelReq, type VercelRes } from '../http'
+import { showsOn, type DisplayPlace } from '@/lib/data/events'
 
 const MAX_PER_ORDER = 10
 
@@ -19,8 +20,11 @@ async function checkout(b: Record<string, unknown>, res: VercelRes) {
   if (!(quantity >= 1 && quantity <= MAX_PER_ORDER)) {
     return res.status(400).json({ error: `Choose 1 to ${MAX_PER_ORDER} tickets.` })
   }
-  const [ev] = await query<TicketEvent & { capacity: number | null }>(`select * from events where id = $1`, [str(b.eventId)])
-  if (!ev || !ev.ticket_price_cents) return res.status(404).json({ error: 'Tickets aren’t on sale for this event.' })
+  const [ev] = await query<TicketEvent & { capacity: number | null; display?: DisplayPlace[] }>(
+    `select * from events where id = $1`,
+    [str(b.eventId)],
+  )
+  if (!ev || !showsOn(ev, 'website') || !ev.ticket_price_cents) return res.status(404).json({ error: 'Tickets aren’t on sale for this event.' })
   if (ev.date < todayLA()) return res.status(400).json({ error: 'This event has already happened.' })
 
   if (ev.capacity) {

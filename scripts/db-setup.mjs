@@ -126,6 +126,7 @@ const schema = [
   `alter table tenants add column if not exists fill text not null default 'teal'`,
   `alter table events add column if not exists start_time text`,
   `alter table events add column if not exists end_time text`,
+  `alter table events add column if not exists display text[] not null default '{website,calendar}'`,
   `alter table bookings add column if not exists org text`,
   `alter table bookings add column if not exists phone text`,
   `alter table bookings add column if not exists backup_date text`,
