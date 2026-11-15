@@ -5,10 +5,12 @@
 
 import { useState, type FormEvent } from 'react'
 import { postJson, type Setup } from '@/lib/admin/api'
-import type { EventCategory, VillageEvent } from '@/lib/data/events'
+import { ALL_PLACES, DISPLAY_PLACES, type DisplayPlace, type EventCategory, type VillageEvent } from '@/lib/data/events'
 import { CATEGORIES, categoryLabel } from '@/components/brand/categories'
 import { ErrorNote, FormField, Panel } from '@/components/internal/internal-ui'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -38,6 +40,9 @@ export function EventForm({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const set = (k: keyof EventDraft) => (e: { target: { value: string } }) => setD({ ...d, [k]: e.target.value })
+  const display = d.display ?? ALL_PLACES
+  const toggle = (place: DisplayPlace, on: boolean) =>
+    setD({ ...d, display: ALL_PLACES.filter((p) => (p === place ? on : display.includes(p))) })
 
   async function save(e: FormEvent) {
     e.preventDefault()
@@ -137,6 +142,33 @@ export function EventForm({
             <Textarea density="compact" id="ev-details" rows={5} value={d.details ?? ''} onChange={set('details')} />
           </FormField>
         </div>
+      </Panel>
+
+      <Panel title="Where it shows">
+        <fieldset className="flex flex-col gap-3">
+          <legend className="sr-only">Where it shows</legend>
+          <div className="flex flex-wrap gap-x-6 gap-y-3">
+            {DISPLAY_PLACES.map((p) => (
+              <span key={p.id} className="flex items-center gap-2">
+                <Checkbox
+                  id={`ev-display-${p.id}`}
+                  checked={display.includes(p.id)}
+                  onCheckedChange={(v) => toggle(p.id, v === true)}
+                />
+                <Label htmlFor={`ev-display-${p.id}`} className="font-normal">
+                  {p.label}
+                </Label>
+              </span>
+            ))}
+          </div>
+          <p className="text-meta text-ink-2">
+            {display.length === 0
+              ? 'Not shown anywhere. Handy for a draft or a hold.'
+              : !display.includes('website')
+                ? 'Hidden from the website, e.g. a private rental.'
+                : 'Untick a place to keep the event off it.'}
+          </p>
+        </fieldset>
       </Panel>
 
       <Panel title="Tickets">

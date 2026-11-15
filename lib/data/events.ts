@@ -9,6 +9,17 @@
 
 export type EventCategory = 'music' | 'dj' | 'community' | 'workshop'
 
+/** Places an event can show. Add a new one here and it gets a checkbox in the admin form and a badge in the events list. */
+export const DISPLAY_PLACES = [
+  { id: 'website', label: 'Website', off: 'Not on website' },
+  { id: 'calendar', label: 'Google Calendar', off: 'Not on Google Calendar' },
+] as const
+export type DisplayPlace = (typeof DISPLAY_PLACES)[number]['id']
+export const ALL_PLACES: DisplayPlace[] = DISPLAY_PLACES.map((p) => p.id)
+
+/** Where the event shows. Missing (seed data, older rows) means everywhere. */
+export const showsOn = (e: Pick<VillageEvent, 'display'>, place: DisplayPlace) => !e.display || e.display.includes(place)
+
 export interface VillageEvent {
   id: string
   title: string
@@ -38,6 +49,8 @@ export interface VillageEvent {
   /** Tickets available online. Admin only; the public site gets ticketsLeft. */
   capacity?: number
   ticketsLeft?: number
+  /** Where it shows: website, Google Calendar… Empty means nowhere (a draft). */
+  display?: DisplayPlace[]
   sample?: boolean
 }
 
