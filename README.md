@@ -49,7 +49,9 @@ Events and shops are edited at **/admin** and stored in Neon Postgres. Each
 admin signs in with their own email + password (`admins` table, scrypt
 hashes). `ADMIN_PASSWORD` is the owner's master key: the first sign-in with
 it creates the first admin, and it works as a recovery password for any
-admin email. The public pages fetch them
+admin email. Admins who forget their password use "Forgot password?" on the
+sign-in screen: it emails a link (signed, one use, one hour) to their own
+address. Run `db:setup` once for its `reset_sent_at` column. The public pages fetch them
 directly from the database on the server (`lib/server/content.ts`);
 `lib/data/events.ts` and `lib/data/tenants.ts` are only the initial seed and
 the fallback used in local dev (no database) or if the database is

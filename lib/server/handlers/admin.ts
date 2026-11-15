@@ -14,6 +14,8 @@ import {
   hashPassword,
   checkPassword,
   tempPassword,
+  resetToken,
+  adminForResetToken,
   setSession,
   clearSession,
   type Admin,
@@ -67,13 +69,19 @@ async function uniqueId(table: 'events' | 'tenants', base: string): Promise<stri
 
 // ── Login ──────────────────────────────────────────────────────────────
 
-async function login(req: VercelReq, res: VercelRes, b: Body) {
-  const ip = clientIp(req)
+/** Sign-in, reset-request and reset attempts from one IP share a limit of 10 per 15 minutes. */
+async function tooManyTries(ip: string) {
   const [{ n }] = await query<{ n: number }>(
     `select count(*)::int as n from login_attempts where ip = $1 and at > now() - interval '15 minutes'`,
     [ip],
   )
-  if (n >= 10) return res.status(429).json({ error: 'Too many tries. Wait 15 minutes and try again.' })
+  return n >= 10
+}
+const TOO_MANY = { error: 'Too many tries. Wait 15 minutes and try again.' }
+
+async function login(req: VercelReq, res: VercelRes, b: Body) {
+  const ip = clientIp(req)
+  if (await tooManyTries(ip)) return res.status(429).json(TOO_MANY)
 
   const email = str(b.email).trim().toLowerCase()
   const password = str(b.password)
@@ -145,6 +153,64 @@ async function changePassword(me: Admin, b: Body) {
     throw new BadRequest('Your current password isn’t right')
   }
   await query(`update admins set password_hash = $2 where id = $1`, [me.id, hashPassword(next)])
+}
+
+// ── Forgot password ────────────────────────────────────────────────────
+// Anyone can ask for a reset link; the answer is the same whether or not the
+// email has an admin login, so the form can't be used to find out who does.
+// The link goes only to the admin's own address, at most once every 5 minutes.
+
+async function forgotPassword(req: VercelReq, res: VercelRes, b: Body) {
+  const ip = clientIp(req)
+  if (await tooManyTries(ip)) return res.status(429).json(TOO_MANY)
+  await query(`insert into login_attempts (ip) values ($1)`, [ip])
+  if (!hasEmail()) return res.status(503).json({ error: 'Email isn’t set up, so reset links can’t be sent. Ask another admin to reset your password under Team.' })
+
+  const email = str(b.email).trim().toLowerCase()
+  const [admin] = isEmail(email)
+    ? await query<Admin & { password_hash: string | null }>(
+        `update admins set reset_sent_at = now()
+         where email = $1 and (reset_sent_at is null or reset_sent_at < now() - interval '5 minutes')
+         returning id, email, name, password_hash`,
+        [email],
+      )
+    : []
+  if (admin) {
+    const link = `${SITE_URL}/admin?reset=${resetToken(admin.id, admin.password_hash)}`
+    await sendEmail({
+      to: [admin.email],
+      subject: 'Reset your Sunset Village admin password',
+      text: [
+        `Hi ${admin.name.split(' ')[0]},`,
+        '',
+        'Someone (hopefully you) asked to reset your password for the sunsetvillagesf.com admin. Choose a new one here:',
+        '',
+        link,
+        '',
+        'The link works once, for the next hour.',
+        'If you didn’t ask for this, ignore this email. Your password stays the same.',
+      ].join('\n'),
+    })
+  }
+  return res.status(200).json({ ok: true })
+}
+
+async function resetPassword(req: VercelReq, res: VercelRes, b: Body) {
+  const ip = clientIp(req)
+  if (await tooManyTries(ip)) return res.status(429).json(TOO_MANY)
+  const admin = await adminForResetToken(str(b.token))
+  if (!admin) {
+    await query(`insert into login_attempts (ip) values ($1)`, [ip])
+    return res.status(400).json({ error: 'This reset link has expired or was already used. Ask for a new one.' })
+  }
+  const next = str(b.password)
+  if (next.length < PASSWORD_MIN) return res.status(400).json({ error: `Use at least ${PASSWORD_MIN} characters` })
+  await query(`update admins set password_hash = $2, reset_sent_at = null, last_login_at = now() where id = $1`, [
+    admin.id,
+    hashPassword(next),
+  ])
+  await setSession(res, admin.id) // signs in here; sessions elsewhere end because the password changed
+  return res.status(200).json({ ok: true })
 }
 
 // ── Overview ───────────────────────────────────────────────────────────
@@ -426,6 +492,8 @@ export default async function handler(req: VercelReq, res: VercelRes) {
 
   try {
     if (action === 'login' && post) return await login(req, res, b)
+    if (action === 'forgot' && post) return await forgotPassword(req, res, b)
+    if (action === 'reset' && post) return await resetPassword(req, res, b)
     if (action === 'logout' && post) {
       clearSession(res)
       return res.status(200).json({ ok: true })

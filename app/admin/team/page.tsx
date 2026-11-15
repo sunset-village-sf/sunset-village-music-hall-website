@@ -14,6 +14,7 @@ import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/ui/password-input'
 
 function NewPassword({ who, password, emailed }: { who: string; password: string; emailed?: boolean }) {
   const [copied, setCopied] = useState(false)
@@ -120,25 +121,24 @@ function ChangePassword({ onChanged }: { onChanged: () => void }) {
     <Panel title="Your password">
       <form onSubmit={submit} className="flex max-w-sm flex-col gap-4">
         <FormField label="Current password" htmlFor="pw-current">
-          <Input density="compact" id="pw-current" name="current" type="password" required autoComplete="current-password" />
+          <PasswordInput density="compact" id="pw-current" name="current" required autoComplete="current-password" />
         </FormField>
         <FormField
           label="New password"
           htmlFor="pw-next"
           hint="At least 10 characters. A few words strung together works well."
         >
-          <Input
+          <PasswordInput
             density="compact"
             id="pw-next"
             name="next"
-            type="password"
             required
             minLength={10}
             autoComplete="new-password"
           />
         </FormField>
         <FormField label="New password again" htmlFor="pw-again">
-          <Input density="compact" id="pw-again" name="again" type="password" required autoComplete="new-password" />
+          <PasswordInput density="compact" id="pw-again" name="again" required autoComplete="new-password" />
         </FormField>
         <ErrorNote>{error}</ErrorNote>
         {done && (
