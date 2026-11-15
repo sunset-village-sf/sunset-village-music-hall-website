@@ -140,6 +140,8 @@ const schema = [
     created_by int,
     last_login_at timestamptz
   )`,
+  // When a "forgot password" email last went out, to stop repeat sends.
+  `alter table admins add column if not exists reset_sent_at timestamptz`,
 ]
 
 for (const stmt of schema) await sql.query(stmt)

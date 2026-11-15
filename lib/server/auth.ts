@@ -89,3 +89,30 @@ export async function currentAdmin(req: VercelReq): Promise<Admin | null> {
   if (!row || !safeEqual(sig, sign(`${id}.${exp}`, row.password_hash))) return null
   return { id: row.id, email: row.email, name: row.name }
 }
+
+// ── Password reset links ───────────────────────────────────────────────
+// A reset token is "<admin id>.<expiry>.<signature>". The signature covers the
+// admin's current password hash, so a link stops working as soon as it's used
+// (or the password changes any other way), and changing ADMIN_PASSWORD voids
+// every outstanding link. Nothing is stored in the database.
+
+const RESET_TTL = 60 * 60 // 1 hour
+const resetSig = (payload: string, passwordHash: string | null) =>
+  createHmac('sha256', key()).update(`reset.${payload}.${passwordHash ?? ''}`).digest('hex')
+
+export function resetToken(adminId: number, passwordHash: string | null): string {
+  const payload = `${adminId}.${Math.floor(Date.now() / 1000) + RESET_TTL}`
+  return `${payload}.${resetSig(payload, passwordHash)}`
+}
+
+/** The admin a reset token belongs to, or null if it's malformed, expired or already used. */
+export async function adminForResetToken(token: string): Promise<Admin | null> {
+  const [id, exp, sig] = token.split('.')
+  if (!/^\d+$/.test(id ?? '') || !/^\d+$/.test(exp ?? '') || !sig || Number(exp) < Date.now() / 1000) return null
+  const [row] = await query<Admin & { password_hash: string | null }>(
+    `select id, email, name, password_hash from admins where id = $1`,
+    [Number(id)],
+  )
+  if (!row || !safeEqual(sig, resetSig(`${id}.${exp}`, row.password_hash))) return null
+  return { id: row.id, email: row.email, name: row.name }
+}
