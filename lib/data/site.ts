@@ -28,7 +28,7 @@ export const site = {
   phone: '415-484-2101',
   room: {
     capacity: 'About 150',
-    stage: '2550 sq feet (~75 x 30)',
+    size: '2,550 sq ft (about 75 × 30 ft)',
     sound: 'PA for vocals and keys, XLR into the board, QSC K10 front monitors, house mics and stands. No backline.',
     extras: 'Projector onto the stage wall (HDMI or USB-C), and a green room for the band and VIPs.',
   },
