@@ -37,14 +37,11 @@ server and refresh every 30 seconds.
 
 ## Deploying
 
-Merges to `main` deploy to Vercel production through GitHub Actions
-(`.github/workflows/deploy.yml`): the runner builds with the Vercel CLI and
-uploads the result. It needs three repository secrets: `VERCEL_TOKEN`,
-`VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` (the last two are in
-`.vercel/project.json` after `vercel link`). The app's own environment
-variables live in the Vercel project. The workflow can also be run by hand
-from the Actions tab. For a one-off deploy from your machine, run
-`vercel deploy --prod`.
+The Vercel project (team "Sunset Village Music Hall") is connected to this
+repo through Vercel's GitHub app. Merges to `main` deploy to production at
+sunsetvillagesf.com, and every pull request gets its own preview link. The
+app's environment variables live in the Vercel project. For a one-off deploy
+from your machine, run `vercel deploy --prod`.
 
 ## Content & admin
 
