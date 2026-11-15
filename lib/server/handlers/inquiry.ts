@@ -7,6 +7,7 @@
 import { query, hasDb } from '../db'
 import { sendEmail, hasEmail, inquiryTo } from '../email'
 import { str, isEmail, type VercelReq, type VercelRes } from '../http'
+import { spamCheck } from '../spam'
 
 export default async function handler(req: VercelReq, res: VercelRes) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -35,6 +36,10 @@ export default async function handler(req: VercelReq, res: VercelRes) {
   if (!name || !isEmail(email) || !message) {
     return res.status(400).json({ error: 'Missing required fields' })
   }
+
+  const spam = await spamCheck(req, { checkSpeed: true })
+  if (spam === 'drop') return res.status(200).json({ ok: true })
+  if (spam === 'reject') return res.status(400).json({ error: 'Spam check failed, please try again' })
 
   let saved = false
   if (hasDb()) {

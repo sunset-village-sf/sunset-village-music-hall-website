@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sparkle } from '@/components/brand/sparkle'
 import { Field, fieldGrid } from '@/components/site/form-field'
 import { postJson } from '@/lib/post'
+import { useSpamGuard } from '@/components/site/spam-guard'
 
 const SPACES = ['Retail', 'Office', 'Studio', 'Not sure yet']
 
@@ -28,6 +29,7 @@ type Values = z.input<typeof schema>
 /** Leasing inquiry. Goes through /api/inquiry, so it lands in /admin → Bookings and Tom's inbox. */
 export function LeasingForm() {
   const [status, setStatus] = useState<'idle' | 'error' | 'sent'>('idle')
+  const guard = useSpamGuard()
   const {
     register,
     control,
@@ -69,7 +71,8 @@ export function LeasingForm() {
       className="flex flex-col gap-5"
       onSubmit={handleSubmit(async ({ space, ...v }) => {
         setStatus('idle')
-        const ok = await postJson('/api/inquiry', { ...v, kind: 'leasing', type: `Leasing · ${space}` })
+        const ok = await postJson('/api/inquiry', { ...v, kind: 'leasing', type: `Leasing · ${space}`, ...guard.payload() })
+        guard.reset()
         setStatus(ok ? 'sent' : 'error')
       })}
     >
@@ -122,6 +125,8 @@ export function LeasingForm() {
       </Field>
 
       {status === 'error' && <Alert variant="destructive">Something went wrong sending your message. Please try again.</Alert>}
+
+      {guard.fields}
 
       <Button type="submit" variant="sun" size="lg" className="self-end" disabled={isSubmitting}>
         {isSubmitting ? 'Sending…' : 'Send →'}

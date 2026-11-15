@@ -8,6 +8,7 @@ import { query, hasDb } from '../db'
 import { sendEmail, hasEmail, emailFont, inquiryTo } from '../email'
 import tokens from '@/lib/tokens.json'
 import { str, isEmail, type VercelReq, type VercelRes } from '../http'
+import { spamCheck } from '../spam'
 
 const page = (msg: string) => `<!doctype html><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -34,6 +35,10 @@ export default async function handler(req: VercelReq, res: VercelRes) {
 
   const email = str(req.body?.email).trim().toLowerCase().slice(0, 200)
   if (!isEmail(email)) return res.status(400).json({ error: 'Invalid email' })
+
+  const spam = await spamCheck(req)
+  if (spam === 'drop') return res.status(200).json({ ok: true })
+  if (spam === 'reject') return res.status(400).json({ error: 'Spam check failed, please try again' })
 
   // Signing up again re-subscribes someone who had unsubscribed.
   const saved = await query(
