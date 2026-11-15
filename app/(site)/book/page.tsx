@@ -47,7 +47,7 @@ export default async function BookPage() {
             <Facts
               items={[
                 ['Capacity', site.room.capacity],
-                ['Stage', site.room.stage],
+                ['Size', site.room.size],
                 ['Sound', site.room.sound],
                 ['Extras', site.room.extras],
               ]}
