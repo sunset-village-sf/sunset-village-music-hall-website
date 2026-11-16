@@ -37,6 +37,7 @@ const TABS = [
   { href: '/admin/tickets', label: 'Tickets' },
   { href: '/admin/newsletter', label: 'Newsletter' },
   { href: '/admin/shops', label: 'Shops' },
+  { href: '/admin/brand', label: 'Brand' },
   { href: '/admin/team', label: 'Team' },
 ]
 
