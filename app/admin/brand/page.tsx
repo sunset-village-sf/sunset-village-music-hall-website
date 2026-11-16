@@ -69,7 +69,7 @@ function AssetCard({ item, wide }: { item: LogoVersion; wide?: boolean }) {
   )
 }
 
-function CopyButton({ value, label }: { value: string; label: string }) {
+function CopyButton({ value, label, shown = value }: { value: string; label: string; shown?: string }) {
   const [copied, setCopied] = useState(false)
   return (
     <button
@@ -80,10 +80,10 @@ function CopyButton({ value, label }: { value: string; label: string }) {
           setTimeout(() => setCopied(false), 1500)
         })
       }
-      className="inline-flex cursor-pointer items-center gap-1.5 rounded-full px-2 py-1 font-mono text-meta hover:bg-sand"
+      className="inline-flex cursor-pointer items-center gap-1.5 rounded-full px-2 py-1 text-left font-mono text-meta whitespace-nowrap hover:bg-sand"
       aria-label={`Copy ${label} ${value}`}
     >
-      {value}
+      {shown}
       {copied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5 text-ink-2" aria-hidden="true" />}
       <span className="sr-only" aria-live="polite">
         {copied ? 'Copied' : ''}
@@ -101,10 +101,21 @@ function ColorCard({ c }: { c: Swatch }) {
       </div>
       <div className="flex flex-col gap-1 p-3">
         <p className="text-ink-2">{c.use}</p>
-        <div className="-ml-2 flex flex-wrap items-center">
-          <CopyButton value={hex} label={`${c.name} hex`} />
-          <CopyButton value={`rgb(${rgbOf(c.key)})`} label={`${c.name} RGB`} />
-        </div>
+        <dl className="-ml-2 flex flex-col items-start">
+          {(
+            [
+              ['Hex', hex, hex],
+              ['RGB', `rgb(${rgbOf(c.key)})`, rgbOf(c.key)],
+            ] as const
+          ).map(([k, value, shown]) => (
+            <div key={k} className="flex items-center">
+              <dt className="w-10 pl-2 label-sm text-ink-2">{k}</dt>
+              <dd>
+                <CopyButton value={value} shown={shown} label={`${c.name} ${k}`} />
+              </dd>
+            </div>
+          ))}
+        </dl>
       </div>
     </li>
   )
@@ -164,7 +175,7 @@ export default function BrandPage() {
                 <div key={g.title}>
                   <h3 className="font-bold">{g.title}</h3>
                   <p className="mb-3 text-ink-2">{g.note}</p>
-                  <ul className={grid('grid-cols-[repeat(auto-fill,minmax(min(150px,100%),1fr))]')}>
+                  <ul className={grid('grid-cols-[repeat(auto-fit,minmax(min(190px,100%),1fr))]')}>
                     {g.colors.map((c) => (
                       <ColorCard key={c.key} c={c} />
                     ))}
