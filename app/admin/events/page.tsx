@@ -143,7 +143,7 @@ export default function EventsPage() {
       )}
       {saved?.calendar === 'failed' && (
         <Alert variant="warning" className="mb-5 font-normal">
-          The event is saved, but Google Calendar didn’t update. Use “Sync Google Calendar” to try again.
+          The event is saved, but Google Calendar didn’t update. It catches up overnight, or use “Sync Google Calendar” to try now.
         </Alert>
       )}
       {syncNote && (

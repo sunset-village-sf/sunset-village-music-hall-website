@@ -348,7 +348,7 @@ async function withCalendar(row: Record<string, any>) {
 }
 
 /** Re-send every upcoming event (and remove ones not marked for the calendar): first-time setup, or catching up after Google was unreachable. */
-async function syncCalendar() {
+export async function syncCalendar() {
   if (!hasCalendar()) throw new BadRequest('Google Calendar isn’t set up yet')
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' })
   const rows = await query(`select * from events where date >= $1 order by date`, [today])
