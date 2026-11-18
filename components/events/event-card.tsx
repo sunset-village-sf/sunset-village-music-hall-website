@@ -5,7 +5,7 @@ import { EventActions } from './event-actions'
 
 /** Events page card: poster on the category fill, then kind/title/subtitle/meta and actions. */
 export function EventCard({ event }: { event: VillageEvent }) {
-  const { dow, day } = dateParts(event.date)
+  const { dow, day, month } = dateParts(event.date)
   const meta = [event.time, priceLine(event)].filter(Boolean).join(' · ')
   return (
     <article className="lift flex flex-col overflow-hidden rounded-xl border-2 border-ink bg-card">
@@ -13,6 +13,7 @@ export function EventCard({ event }: { event: VillageEvent }) {
         category={categoryOf(event)}
         dow={dow}
         day={day}
+        month={month}
         flyer={event.flyer}
         title={event.title}
         className="border-b-2 border-dashed border-ink"
