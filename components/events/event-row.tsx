@@ -1,21 +1,19 @@
 import Link from 'next/link'
 import type { VillageEvent } from '@/lib/data/events'
 import { TicketStub } from '@/components/brand/ticket-stub'
-import { categoryOf, dateParts, eventHref, priceLine } from '@/lib/events'
-import { PrimaryEventButton } from './event-actions'
-import { Button } from '@/components/ui/button'
-import { primaryAction } from '@/lib/events'
+import { cardLink, categoryOf, dateParts, eventHref, priceLine } from '@/lib/events'
+import { EventButton } from './event-actions'
 
-/** Home "Coming up" row: ticket stub, title block, time/price, one button. */
+/** Home "Coming up" row: ticket stub, title block, time/price, one button. The whole row opens the event. */
 export function EventRow({ event }: { event: VillageEvent }) {
   const price = priceLine(event)
   return (
-    <article className="flex flex-wrap items-center gap-x-7 gap-y-4 rounded-row border-2 border-ink bg-card py-4 pr-5 pl-4 transition-transform duration-200 hover:-translate-y-0.5">
+    <article className="group relative flex flex-wrap items-center gap-x-7 gap-y-4 rounded-row border-2 border-ink bg-card py-4 pr-5 pl-4 transition-transform duration-200 hover:-translate-y-0.5">
       <TicketStub {...dateParts(event.date)} category={categoryOf(event)} />
       <div className="flex min-w-0 flex-[999_1_280px] flex-col gap-1.5">
         {event.kind && <span className="kind">{event.kind}</span>}
         <h3 className="text-heading-lg">
-          <Link href={eventHref(event)} className="text-ink no-underline hover:underline">
+          <Link href={eventHref(event)} className={cardLink}>
             {event.title}
           </Link>
         </h3>
@@ -25,13 +23,7 @@ export function EventRow({ event }: { event: VillageEvent }) {
         {event.time && <div>{event.time}</div>}
         {price && <div className="font-medium">{price}</div>}
       </div>
-      {primaryAction(event) ? (
-        <PrimaryEventButton event={event} />
-      ) : (
-        <Button asChild>
-          <Link href={eventHref(event)}>Details</Link>
-        </Button>
-      )}
+      <EventButton event={event} />
     </article>
   )
 }
