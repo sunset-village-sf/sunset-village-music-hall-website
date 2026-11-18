@@ -46,6 +46,14 @@ export const eventHref = (e: VillageEvent) => `/events/${encodeURIComponent(e.id
  * The event's main action. Online sales and RSVPs go to the event page
  * (where the ticket box lives); an outside ticket link goes straight out.
  */
+/**
+ * Makes a card clickable as a whole: put on the card's title link (the card
+ * needs `relative`). Buttons inside the card that go somewhere else take
+ * `raised` so they stay on top and keep their own link.
+ */
+export const cardLink = "no-underline text-ink group-hover:underline after:absolute after:inset-0 after:content-['']"
+export const raised = 'relative z-10'
+
 export function primaryAction(e: VillageEvent): { label: string; href: string; external: boolean } | null {
   if (e.date < todayISO()) return null
   if (sellsOnline(e)) return { label: e.cta || 'Get tickets', href: eventHref(e), external: false }
