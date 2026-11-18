@@ -1,10 +1,8 @@
 import Link from 'next/link'
 import type { VillageEvent } from '@/lib/data/events'
 import { TicketStub } from '@/components/brand/ticket-stub'
-import { cardLink, categoryOf, dateParts, eventHref, priceLine, raised } from '@/lib/events'
-import { PrimaryEventButton } from './event-actions'
-import { Button } from '@/components/ui/button'
-import { primaryAction } from '@/lib/events'
+import { cardLink, categoryOf, dateParts, eventHref, priceLine } from '@/lib/events'
+import { EventButton } from './event-actions'
 
 /** Home "Coming up" row: ticket stub, title block, time/price, one button. The whole row opens the event. */
 export function EventRow({ event }: { event: VillageEvent }) {
@@ -25,13 +23,7 @@ export function EventRow({ event }: { event: VillageEvent }) {
         {event.time && <div>{event.time}</div>}
         {price && <div className="font-medium">{price}</div>}
       </div>
-      {primaryAction(event) ? (
-        <PrimaryEventButton event={event} />
-      ) : (
-        <Button asChild className={raised}>
-          <Link href={eventHref(event)}>Details</Link>
-        </Button>
-      )}
+      <EventButton event={event} />
     </article>
   )
 }

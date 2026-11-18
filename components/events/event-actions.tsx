@@ -20,16 +20,25 @@ export function PrimaryEventButton({ event, size }: { event: VillageEvent; size?
   )
 }
 
-/** Main action + "Details". When there's no main action, Details becomes the ink button. */
+/**
+ * One button per event: its main action (tickets, RSVP…) if it has one,
+ * otherwise "Details". The whole card already opens the event, so a Details
+ * button next to a ticket button would only repeat it.
+ */
+export function EventButton({ event, size }: { event: VillageEvent; size?: 'md' | 'default' }) {
+  if (primaryAction(event)) return <PrimaryEventButton event={event} size={size} />
+  return (
+    <Button asChild size={size} className={raised}>
+      <Link href={eventHref(event)}>Details</Link>
+    </Button>
+  )
+}
+
+/** The card's button, pinned to the bottom. */
 export function EventActions({ event }: { event: VillageEvent }) {
-  const a = primaryAction(event)
-  const detailsIsPrimary = !a || (!a.external && a.href === eventHref(event) && !event.cta && !event.ticketPrice)
   return (
     <div className="mt-auto flex flex-wrap gap-2 pt-3">
-      <PrimaryEventButton event={event} size="md" />
-      <Button asChild size="md" variant={a && !detailsIsPrimary ? 'outline' : 'default'} className={raised}>
-        <Link href={eventHref(event)}>Details</Link>
-      </Button>
+      <EventButton event={event} size="md" />
     </div>
   )
 }
