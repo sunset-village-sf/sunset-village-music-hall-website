@@ -127,6 +127,8 @@ const schema = [
   `alter table events add column if not exists start_time text`,
   `alter table events add column if not exists end_time text`,
   `alter table events add column if not exists display text[] not null default '{website,calendar}'`,
+  // The lineup: [{ name, instagram?, facebook?, headliner? }], in billing order.
+  `alter table events add column if not exists artists jsonb not null default '[]'`,
   `alter table bookings add column if not exists org text`,
   `alter table bookings add column if not exists phone text`,
   `alter table bookings add column if not exists backup_date text`,

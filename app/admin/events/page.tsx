@@ -89,6 +89,10 @@ export default function EventsPage() {
         <EventForm
           initial={editing}
           setup={me}
+          knownArtists={(data ?? [])
+            .filter((e) => e.id !== editing.id)
+            .sort((a, b) => b.date.localeCompare(a.date))
+            .flatMap((e) => e.artists ?? [])}
           onDone={(ev) => {
             setEditing(null)
             setSaved(ev ?? null)

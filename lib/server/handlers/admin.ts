@@ -35,6 +35,7 @@ import {
 } from '../email'
 import { str, opt, clientIp, isEmail, type VercelReq, type VercelRes } from '../http'
 import { ALL_PLACES, showsOn, type DisplayPlace, type VillageEvent } from '@/lib/data/events'
+import { MAX_ARTISTS, facebookUrl, instagramHandle, type Artist } from '@/lib/artists'
 
 type Body = Record<string, any>
 
@@ -257,6 +258,27 @@ function cleanDisplay(v: unknown): DisplayPlace[] {
   return ALL_PLACES.filter((p) => v.includes(p))
 }
 
+/** The lineup: drops empty rows, tidies social links, keeps at most one headliner. */
+function cleanArtists(v: unknown): Artist[] {
+  const rows = (Array.isArray(v) ? v : []) as Body[]
+  const out: Artist[] = []
+  for (const r of rows) {
+    const name = opt(r?.name, 100)
+    const ig = opt(r?.instagram, 200)
+    const fb = opt(r?.facebook, 300)
+    if (!name && !ig && !fb) continue
+    if (!name) throw new BadRequest('Give each artist a name')
+    const instagram = ig ? instagramHandle(ig) : null
+    if (ig && !instagram) throw new BadRequest(`${name}’s Instagram doesn’t look like a username`)
+    const facebook = fb ? facebookUrl(fb) : null
+    if (fb && !facebook) throw new BadRequest(`${name}’s Facebook doesn’t look like a Facebook page`)
+    const headliner = r.headliner === true && !out.some((a) => a.headliner)
+    out.push({ name, ...(instagram && { instagram }), ...(facebook && { facebook }), ...(headliner && { headliner }) })
+  }
+  if (out.length > MAX_ARTISTS) throw new BadRequest(`Up to ${MAX_ARTISTS} artists per event`)
+  return out
+}
+
 async function saveEvent(b: Body) {
   const date = need(opt(b.date, 10), 'Date')
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new BadRequest('Date must look like 2026-10-31')
@@ -296,13 +318,14 @@ async function saveEvent(b: Body) {
     startTime,
     endTime,
     cleanDisplay(b.display),
+    JSON.stringify(cleanArtists(b.artists)),
   ]
   // Existing events keep their id so their /events/<id> link never breaks.
   if (b.id) {
     const rows = await query(
       `update events set title=$2, date=$3, time=$4, venue=$5, summary=$6, details=$7, price=$8,
          ticket_url=$9, flyer=$10, ticket_price_cents=$11, capacity=$12, category=$13, kind=$14, subtitle=$15,
-         cta=$16, start_time=$17, end_time=$18, display=$19, sample=false, updated_at=now() where id=$1 returning *`,
+         cta=$16, start_time=$17, end_time=$18, display=$19, artists=$20, sample=false, updated_at=now() where id=$1 returning *`,
       [str(b.id), ...fields],
     )
     if (!rows.length) throw new BadRequest('That event no longer exists')
@@ -311,8 +334,8 @@ async function saveEvent(b: Body) {
   const id = await uniqueId('events', slugify(`${title} ${date.slice(5)}`))
   const rows = await query(
     `insert into events (id, title, date, time, venue, summary, details, price, ticket_url, flyer, ticket_price_cents, capacity,
-       category, kind, subtitle, cta, start_time, end_time, display)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) returning *`,
+       category, kind, subtitle, cta, start_time, end_time, display, artists)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) returning *`,
     [id, ...fields],
   )
   return withCalendar(rows[0])

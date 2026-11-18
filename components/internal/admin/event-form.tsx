@@ -15,30 +15,38 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ImagePicker } from './image-picker'
+import { ArtistsField, firstBadSocial, tidyArtists, toArtistDrafts, type ArtistDraft } from './artists-field'
+import type { Artist } from '@/lib/artists'
 
-export type EventDraft = Omit<Partial<VillageEvent>, 'ticketPrice' | 'capacity'> & {
+export type EventDraft = Omit<Partial<VillageEvent>, 'ticketPrice' | 'capacity' | 'artists'> & {
   ticketPrice?: string
   capacity?: string
+  artists?: ArtistDraft[]
 }
 
 export const toDraft = (e: Partial<VillageEvent>): EventDraft => ({
   ...e,
   ticketPrice: e.ticketPrice ? String(e.ticketPrice / 100) : '',
   capacity: e.capacity ? String(e.capacity) : '',
+  artists: toArtistDrafts(e.artists),
 })
 
 export function EventForm({
   initial,
   setup,
+  knownArtists = [],
   onDone,
 }: {
   initial: EventDraft
   setup: Setup
+  /** Artists from other events, for name suggestions. */
+  knownArtists?: Artist[]
   onDone: (saved?: VillageEvent) => void
 }) {
   const [d, setD] = useState<EventDraft>(initial)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [showArtistErrors, setShowArtistErrors] = useState(false)
   const set = (k: keyof EventDraft) => (e: { target: { value: string } }) => setD({ ...d, [k]: e.target.value })
   const display = d.display ?? ALL_PLACES
   const toggle = (place: DisplayPlace, on: boolean) =>
@@ -46,10 +54,17 @@ export function EventForm({
 
   async function save(e: FormEvent) {
     e.preventDefault()
+    const bad = firstBadSocial(d.artists ?? [])
+    if (bad) {
+      setShowArtistErrors(true)
+      setError('One of the artist links needs fixing. It’s marked below.')
+      document.getElementById(bad)?.focus()
+      return
+    }
     setBusy(true)
     setError('')
     try {
-      onDone(await postJson<VillageEvent>('event-save', d))
+      onDone(await postJson<VillageEvent>('event-save', { ...d, artists: tidyArtists(d.artists ?? []) }))
     } catch (err) {
       setError((err as Error).message)
       setBusy(false)
@@ -142,6 +157,15 @@ export function EventForm({
             <Textarea density="compact" id="ev-details" rows={5} value={d.details ?? ''} onChange={set('details')} />
           </FormField>
         </div>
+      </Panel>
+
+      <Panel title="Artists">
+        <ArtistsField
+          value={d.artists ?? []}
+          onChange={(artists) => setD({ ...d, artists })}
+          known={knownArtists}
+          showErrors={showArtistErrors}
+        />
       </Panel>
 
       <Panel title="Where it shows">
