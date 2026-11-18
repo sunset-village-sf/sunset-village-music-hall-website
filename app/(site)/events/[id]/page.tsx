@@ -33,7 +33,7 @@ export default async function EventPage({ params }: Props) {
   const event = await findEvent((await params).id)
   if (!event) notFound()
 
-  const { dow, day } = dateParts(event.date)
+  const { dow, day, month } = dateParts(event.date)
   const isPast = event.date < new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' })
   const price = priceLine(event)
   const lede = event.subtitle ?? event.summary
@@ -66,6 +66,7 @@ export default async function EventPage({ params }: Props) {
             category={categoryOf(event)}
             dow={dow}
             day={day}
+            month={month}
             flyer={event.flyer}
             title={event.title}
             className="rounded-2xl border-2 border-ink"

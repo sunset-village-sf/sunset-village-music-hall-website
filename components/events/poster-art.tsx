@@ -1,6 +1,6 @@
 // The event card's 4:3 poster. With artwork, the flyer fills it and the date
 // sits on a small stub; without, it's the category fill with the big date,
-// a sparkle and the wave lines.
+// a sparkle and the wave lines. Both show the month, so past events read clearly.
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { Sparkle } from '@/components/brand/sparkle'
@@ -12,6 +12,7 @@ export function PosterArt({
   category,
   dow,
   day,
+  month,
   flyer,
   title,
   className,
@@ -19,6 +20,7 @@ export function PosterArt({
   category: EventCategory
   dow: string
   day: number
+  month: string
   flyer?: string
   title: string
   className?: string
@@ -30,7 +32,8 @@ export function PosterArt({
           <Image src={flyer} alt={`Flyer for ${title}`} fill sizes="(max-width: 640px) 100vw, 400px" className="object-cover" />
           <div className="absolute top-3 left-3 rounded-sm border-2 border-ink bg-paper px-2.5 py-1.5 text-center leading-none">
             <span className="label-sm block">{dow}</span>
-            <b className="mt-0.5 block text-heading-lg">{day}</b>
+            <b className="my-0.5 block text-heading-lg">{day}</b>
+            <span className="label-sm block">{month}</span>
           </div>
         </>
       ) : (
@@ -47,6 +50,7 @@ export function PosterArt({
           <div className="absolute top-3.5 left-4.5 leading-[.85]">
             <span className="label-sm text-xs">{dow}</span>
             <b className="block text-8xl font-extrabold tracking-[-0.05em]">{day}</b>
+            <span className="label-sm block text-xs">{month}</span>
           </div>
         </>
       )}
