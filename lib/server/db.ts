@@ -48,6 +48,7 @@ export const eventFromRow = (r: Record<string, any>) =>
     startTime: r.start_time,
     endTime: r.end_time,
     display: r.display,
+    artists: r.artists?.length ? r.artists : null,
     sample: r.sample || null,
   })
 

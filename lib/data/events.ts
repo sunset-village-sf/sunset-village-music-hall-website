@@ -7,6 +7,8 @@
 // ticket seller instead; `price` alone shows "$X at the door".
 // `sample: true` renders an "example listing" label.
 
+import type { Artist } from '../artists'
+
 export type EventCategory = 'music' | 'dj' | 'community' | 'workshop'
 
 /** Places an event can show. Add a new one here and it gets a checkbox in the admin form and a badge in the events list. */
@@ -51,6 +53,8 @@ export interface VillageEvent {
   ticketsLeft?: number
   /** Where it shows: website, Google Calendar… Empty means nowhere (a draft). */
   display?: DisplayPlace[]
+  /** Who's playing, in billing order, with their socials. */
+  artists?: Artist[]
   sample?: boolean
 }
 
