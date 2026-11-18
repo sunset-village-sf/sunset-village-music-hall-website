@@ -8,7 +8,9 @@ import { Button } from '@/components/ui/button'
 import { Facts, Section } from '@/components/layout/section'
 import { PosterArt } from '@/components/events/poster-art'
 import { TicketBox } from '@/components/events/ticket-box'
+import { Lineup, billing } from '@/components/events/lineup'
 import { loadContent } from '@/lib/server/content'
+import { instagramUrl } from '@/lib/artists'
 import { categoryOf, dateParts, longDate, priceLine, sellsOnline } from '@/lib/events'
 import { site, fullAddress } from '@/lib/data/site'
 
@@ -46,6 +48,13 @@ export default async function EventPage({ params }: Props) {
     description: event.summary,
     image: event.flyer ? new URL(event.flyer, site.url).toString() : undefined,
     location: { '@type': 'MusicVenue', name: site.name, address: fullAddress },
+    performer: event.artists?.length
+      ? billing(event.artists).map((a) => ({
+          '@type': 'PerformingGroup',
+          name: a.name,
+          sameAs: [a.instagram && instagramUrl(a.instagram), a.facebook].filter(Boolean),
+        }))
+      : undefined,
   }
 
   return (
@@ -73,6 +82,7 @@ export default async function EventPage({ params }: Props) {
           />
           {event.sample && <Badge tone="yellow">Example listing</Badge>}
           {body && body !== lede && <p className="max-w-160 text-lede whitespace-pre-line">{body}</p>}
+          <Lineup artists={event.artists} />
         </div>
 
         <aside className="flex min-w-0 flex-[1_1_340px] flex-col gap-6 rounded-2xl border-2 border-ink bg-card p-7">
