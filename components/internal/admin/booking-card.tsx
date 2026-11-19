@@ -1,6 +1,6 @@
 'use client'
 
-// One booking inquiry: who, what they asked for, status buttons, private
+// One hall booking request: who, what they asked for, status buttons, private
 // notes, archive.
 
 import { useState } from 'react'

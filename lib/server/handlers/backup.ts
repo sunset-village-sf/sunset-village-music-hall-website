@@ -47,7 +47,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
         'Your weekly backup of the website records is attached. You don’t need to do anything;',
         'keep these emails as a spare copy. Open the files in Excel, Numbers, or Google Sheets.',
         '',
-        `Bookings: ${bookings.length} total`,
+        `Hall requests and leasing inquiries: ${bookings.length} total`,
         `Newsletter: ${active} subscribed (${subscribers.length} including unsubscribed)`,
         `Ticket orders: ${orders.length} total`,
       ].join('\n'),

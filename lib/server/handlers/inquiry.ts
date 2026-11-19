@@ -1,6 +1,6 @@
 // Vercel serverless function: POST /api/inquiry
-// Saves a booking/event or leasing inquiry to the database (shown in /admin under
-// Bookings) and emails it to INQUIRY_TO (one or more addresses) via Resend when email is set up.
+// Saves a hall booking request or leasing inquiry to the database (shown in /admin under
+// Hall requests) and emails it to INQUIRY_TO (one or more addresses) via Resend when email is set up.
 // Succeeds if either the save or the email went through; if both fail the
 // visitor sees an error (their form stays filled in) and can try again.
 
@@ -75,14 +75,14 @@ export default async function handler(req: VercelReq, res: VercelRes) {
       'Message:',
       message,
       '',
-      saved ? 'Also saved in the admin: https://sunsetvillagesf.com/admin/bookings' : '',
+      saved ? 'Also saved in the admin: https://sunsetvillagesf.com/admin/requests' : '',
     ]
     emailed = await sendEmail({
       to: inquiryTo(),
       reply_to: email,
       subject: leasing
         ? `Sunset Village leasing inquiry — ${type.replace(/^Leasing · /, '')} — ${name}`
-        : `Sunset Village inquiry — ${type || 'general'} — ${name}`,
+        : `Sunset Village hall request — ${type || 'general'} — ${name}`,
       text: lines.join('\n'),
     })
   }
