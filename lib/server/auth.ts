@@ -9,6 +9,7 @@
 // signs in (password recovery), and when there are no admins yet it creates
 // the first account.
 
+import type { Role } from '@/lib/team'
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { query } from './db'
 import { header, type VercelReq, type VercelRes } from './http'
@@ -20,6 +21,7 @@ export interface Admin {
   id: number
   email: string
   name: string
+  role: Role
 }
 
 const key = () => createHash('sha256').update(`sv-admin:${process.env.ADMIN_PASSWORD}`).digest()
@@ -83,11 +85,11 @@ export async function currentAdmin(req: VercelReq): Promise<Admin | null> {
   const [id, exp, sig] = raw.slice(COOKIE.length + 1).split('.')
   if (!/^\d+$/.test(id ?? '') || !exp || !sig || Number(exp) < Date.now() / 1000) return null
   const [row] = await query<Admin & { password_hash: string | null }>(
-    `select id, email, name, password_hash from admins where id = $1`,
+    `select id, email, name, role, password_hash from admins where id = $1`,
     [Number(id)],
   )
   if (!row || !safeEqual(sig, sign(`${id}.${exp}`, row.password_hash))) return null
-  return { id: row.id, email: row.email, name: row.name }
+  return { id: row.id, email: row.email, name: row.name, role: row.role }
 }
 
 // ── Password reset links ───────────────────────────────────────────────
@@ -110,9 +112,9 @@ export async function adminForResetToken(token: string): Promise<Admin | null> {
   const [id, exp, sig] = token.split('.')
   if (!/^\d+$/.test(id ?? '') || !/^\d+$/.test(exp ?? '') || !sig || Number(exp) < Date.now() / 1000) return null
   const [row] = await query<Admin & { password_hash: string | null }>(
-    `select id, email, name, password_hash from admins where id = $1`,
+    `select id, email, name, role, password_hash from admins where id = $1`,
     [Number(id)],
   )
   if (!row || !safeEqual(sig, resetSig(`${id}.${exp}`, row.password_hash))) return null
-  return { id: row.id, email: row.email, name: row.name }
+  return { id: row.id, email: row.email, name: row.name, role: row.role }
 }

@@ -2,6 +2,7 @@
 // screens can show it as is.
 
 import type { RequestKind, RequestStatus } from '@/lib/requests'
+import type { AlertKind, Role } from '@/lib/team'
 
 export class SignedOut extends Error {}
 
@@ -69,7 +70,7 @@ export interface Setup {
 }
 
 export interface Me extends Setup {
-  admin: { id: number; email: string; name: string }
+  admin: { id: number; email: string; name: string; role: Role }
   newBookings: number
   newLeasing: number
   usingSetupPassword: boolean
@@ -79,6 +80,8 @@ export interface AdminUser {
   id: number
   email: string
   name: string
+  role: Role
+  alerts: AlertKind[]
   created_at: string
   last_login_at: string | null
   created_by_name: string | null

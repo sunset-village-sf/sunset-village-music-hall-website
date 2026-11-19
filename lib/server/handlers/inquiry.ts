@@ -1,19 +1,21 @@
 // Vercel serverless function: POST /api/inquiry
 // Saves a hall booking request or leasing inquiry to the database (shown in /admin under
-// Hall requests or Leasing) and emails it to INQUIRY_TO (one or more addresses) via Resend when email is set up.
+// Hall requests or Leasing) and emails the team members who get that alert (see
+// lib/server/alerts.ts) via Resend when email is set up.
 // Succeeds if either the save or the email went through; if both fail the
 // visitor sees an error (their form stays filled in) and can try again.
 
 import { query, hasDb } from '../db'
 import { sendEmail, hasEmail, inquiryTo, fromMailbox, SITE_URL } from '../email'
+import { alertRecipients } from '../alerts'
 import { str, isEmail, type VercelReq, type VercelRes } from '../http'
 import { spamCheck } from '../spam'
 
 export default async function handler(req: VercelReq, res: VercelRes) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const notify = hasEmail() && inquiryTo().length > 0
-  if (!hasDb() && !notify) {
+  // Without a database the alert is the only copy, and it can only go to INQUIRY_TO.
+  if (!hasDb() && !(hasEmail() && inquiryTo().length > 0)) {
     return res.status(500).json({ error: 'Inquiry endpoint not configured' })
   }
 
@@ -57,7 +59,8 @@ export default async function handler(req: VercelReq, res: VercelRes) {
   }
 
   let emailed = false
-  if (notify) {
+  const to = hasEmail() ? await alertRecipients(leasing ? 'leasing' : 'hall') : []
+  if (to.length) {
     const lines = [
       leasing ? `Space: ${space || '(not given)'}` : `Type: ${type || '(not given)'}`,
       `Name: ${name}`,
@@ -80,7 +83,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
     ]
     emailed = await sendEmail({
       ...(leasing ? { from: fromMailbox('leasing') } : {}),
-      to: inquiryTo(),
+      to,
       reply_to: email,
       subject: leasing
         ? `Sunset Village leasing inquiry — ${space || 'space'} — ${name}`
