@@ -44,9 +44,6 @@ export function PosterArt({
             <path d={`M0 275 ${WAVE}`} stroke="currentColor" strokeWidth="4" fill="none" opacity="0.35" />
           </svg>
           <Sparkle size={40} className="absolute top-6 right-7" />
-          <span className="absolute right-3 bottom-3 rounded-full bg-ink px-2.5 py-1.5 font-mono text-label-sm tracking-[0.06em] text-fog">
-            [EVENT ART]
-          </span>
           <div className="absolute top-3.5 left-4.5 leading-[.85]">
             <span className="label-sm text-xs">{dow}</span>
             <b className="block text-8xl font-extrabold tracking-[-0.05em]">{day}</b>
