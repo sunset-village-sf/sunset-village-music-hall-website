@@ -7,7 +7,7 @@ The approved V2 design is in `handoff/` (Claude Design handoff). Treat it as the
 2. `handoff/reference/screenshots/` — every page at 1440 and 390 (2×).
 3. `handoff/docs/design-spec.md` — page-by-page spec. `handoff/docs/design-system.md` — tokens, components, internal-page rules.
 
-Deliberate differences from the handoff: content comes from the database, not the sample JSON; the newsletter signup is built in (subscribers table), not an external link; event pages with Stripe tickets and the admin are kept; capacity shows `[capacity]` until confirmed.
+Deliberate differences from the handoff: content comes from the database, not the sample JSON; the newsletter signup is built in (subscribers table), not an external link; event pages with Stripe tickets and the admin are kept; capacity shows `[capacity]` until confirmed. Posters without uploaded artwork drop the handoff's "[EVENT ART]" tag (it read as unfinished to visitors).
 
 ## Layout
 
