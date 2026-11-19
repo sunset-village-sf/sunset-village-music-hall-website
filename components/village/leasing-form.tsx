@@ -26,7 +26,7 @@ const schema = z.object({
 })
 type Values = z.input<typeof schema>
 
-/** Leasing inquiry. Goes through /api/inquiry, so it lands in /admin → Hall requests and Tom's inbox. */
+/** Leasing inquiry. Goes through /api/inquiry, so it lands in /admin → Leasing and the team's inbox. */
 export function LeasingForm() {
   const [status, setStatus] = useState<'idle' | 'error' | 'sent'>('idle')
   const guard = useSpamGuard()
@@ -71,7 +71,7 @@ export function LeasingForm() {
       className="flex flex-col gap-5"
       onSubmit={handleSubmit(async ({ space, ...v }) => {
         setStatus('idle')
-        const ok = await postJson('/api/inquiry', { ...v, kind: 'leasing', type: `Leasing · ${space}`, ...guard.payload() })
+        const ok = await postJson('/api/inquiry', { ...v, kind: 'leasing', space, type: `Leasing · ${space}`, ...guard.payload() })
         guard.reset()
         setStatus(ok ? 'sent' : 'error')
       })}

@@ -17,7 +17,7 @@ import { FormField, InternalMain, InternalTopBar } from './internal-ui'
 
 interface AdminCtx {
   me: Me
-  /** Re-fetch `me` (new hall request count, setup flags). */
+  /** Re-fetch `me` (new request counts, setup flags). */
   refresh: () => void
   /** Call when an API call comes back 401. */
   signedOut: () => void
@@ -34,6 +34,7 @@ const TABS = [
   { href: '/admin/overview', label: 'Overview' },
   { href: '/admin/events', label: 'Events' },
   { href: '/admin/requests', label: 'Hall requests', badge: 'newBookings' as const },
+  { href: '/admin/leasing', label: 'Leasing', badge: 'newLeasing' as const },
   { href: '/admin/tickets', label: 'Tickets' },
   { href: '/admin/newsletter', label: 'Newsletter' },
   { href: '/admin/shops', label: 'Shops' },

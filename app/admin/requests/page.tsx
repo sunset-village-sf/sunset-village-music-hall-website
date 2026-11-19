@@ -4,11 +4,11 @@
 // replied / booked / declined and carry private notes.
 
 import { useState, type FormEvent } from 'react'
-import { getJson, postJson, type Booking } from '@/lib/admin/api'
+import { getJson, postJson } from '@/lib/admin/api'
 import { useLoad } from '@/lib/admin/use-load'
 import { useAdmin } from '@/components/internal/admin-shell'
-import { EmptyState, ErrorNote, FormField, PageHeader, Panel } from '@/components/internal/internal-ui'
-import { BookingCard } from '@/components/internal/admin/booking-card'
+import { ErrorNote, FormField, PageHeader, Panel } from '@/components/internal/internal-ui'
+import { RequestList } from '@/components/internal/admin/request-list'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -125,43 +125,12 @@ function FormChoice({ onSignedOut }: { onSignedOut: () => void }) {
 }
 
 export default function HallRequestsPage() {
-  const { refresh, signedOut } = useAdmin()
-  const { data, error, reload } = useLoad(() => getJson<Booking[]>('bookings'), signedOut)
-  const [filter, setFilter] = useState<'open' | 'all'>('open')
-
-  const shown = (data ?? []).filter((b) => filter === 'all' || b.status === 'new' || b.status === 'replied')
-  const changed = () => {
-    reload()
-    refresh() // update the "new" badge on the Hall requests tab
-  }
-
+  const { signedOut } = useAdmin()
   return (
     <>
       <PageHeader title="Hall booking requests" description="Requests to book the hall, sent through the form on the Book the hall page." />
       <FormChoice onSignedOut={signedOut} />
-      <ToggleGroup
-        type="single"
-        size="sm"
-        spacing={2}
-        value={filter}
-        onValueChange={(v) => v && setFilter(v as 'open' | 'all')}
-        aria-label="Show"
-        className="mb-5"
-      >
-        <ToggleGroupItem value="open">Needs attention</ToggleGroupItem>
-        <ToggleGroupItem value="all">All ({data?.length ?? 0})</ToggleGroupItem>
-      </ToggleGroup>
-      <ErrorNote>{error}</ErrorNote>
-      {data && shown.length === 0 && (
-        <EmptyState>
-          {filter === 'open' ? 'You’re all caught up. Nothing new or waiting on a reply.' : 'No requests yet.'}
-        </EmptyState>
-      )}
-      <div className="flex flex-col gap-4">
-        {shown.map((b) => (
-          <BookingCard key={b.id} b={b} onChange={changed} />
-        ))}
-      </div>
+      <RequestList kind="hall" />
     </>
   )
 }

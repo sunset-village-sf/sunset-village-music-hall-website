@@ -1,25 +1,19 @@
 'use client'
 
-// One hall booking request: who, what they asked for, status buttons, private
+// One hall booking request or leasing inquiry: who, what they asked for, status buttons, private
 // notes, archive.
 
 import { useState } from 'react'
 import { postJson, type Booking } from '@/lib/admin/api'
 import { fmtWhen } from '@/lib/admin/use-load'
 import { longDate } from '@/lib/events'
+import { REQUEST_STATUSES, statusLabel } from '@/lib/requests'
 import { ErrorNote, Mono } from '@/components/internal/internal-ui'
 import { StatusPill } from '@/components/internal/status-pill'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-
-export const BOOKING_STATUSES: { value: Booking['status']; label: string }[] = [
-  { value: 'new', label: 'New' },
-  { value: 'replied', label: 'Replied' },
-  { value: 'booked', label: 'Booked' },
-  { value: 'declined', label: 'Declined' },
-]
 
 const asDate = (v?: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? longDate(v) : v)
 
@@ -28,6 +22,7 @@ export function BookingCard({ b, onChange }: { b: Booking; onChange: () => void 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [savedNotes, setSavedNotes] = useState(false)
+  const leasing = b.kind === 'leasing'
 
   async function update(patch: Partial<Booking>) {
     setBusy(true)
@@ -59,7 +54,7 @@ export function BookingCard({ b, onChange }: { b: Booking; onChange: () => void 
     }
   }
 
-  const reply = `mailto:${b.email}?subject=${encodeURIComponent('Re: your Sunset Village inquiry')}`
+  const reply = `mailto:${b.email}?subject=${encodeURIComponent(leasing ? 'Re: your Sunset Village leasing inquiry' : 'Re: your Sunset Village inquiry')}`
   const needs = (b.needs ?? '')
     .split(',')
     .map((s) => s.trim())
@@ -79,7 +74,8 @@ export function BookingCard({ b, onChange }: { b: Booking; onChange: () => void 
         {b.phone}
       </a>,
     ])
-  if (b.org) details.push(['Organization', b.org])
+  if (b.org) details.push([leasing ? 'Business' : 'Organization', b.org])
+  if (b.space) details.push(['Space', b.space])
   if (b.date) details.push(['Date wanted', asDate(b.date)])
   if (b.backup_date) details.push(['Backup date', asDate(b.backup_date)])
   if (b.headcount) details.push(['Headcount', b.headcount])
@@ -101,10 +97,10 @@ export function BookingCard({ b, onChange }: { b: Booking; onChange: () => void 
         <div className="min-w-0">
           <h3 className="text-heading-md">{b.name}</h3>
           <p className="mt-0.5 text-ink-2">
-            {b.type || 'Inquiry'} · <Mono>sent {fmtWhen(b.created_at)}</Mono>
+            {leasing ? `Leasing${b.space ? ` · ${b.space}` : ''}` : b.type || 'Inquiry'} · <Mono>sent {fmtWhen(b.created_at)}</Mono>
           </p>
         </div>
-        <StatusPill status={b.status}>{BOOKING_STATUSES.find((s) => s.value === b.status)?.label}</StatusPill>
+        <StatusPill status={b.status}>{statusLabel(b.kind, b.status)}</StatusPill>
       </div>
 
       <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-5 gap-y-1.5">
@@ -123,7 +119,7 @@ export function BookingCard({ b, onChange }: { b: Booking; onChange: () => void 
             <a href={reply}>Reply by email</a>
           </Button>
           <span className="label-sm ml-1 text-ink-2">Mark as</span>
-          {BOOKING_STATUSES.filter((s) => s.value !== b.status).map((s) => (
+          {REQUEST_STATUSES[b.kind].filter((s) => s.value !== b.status).map((s) => (
             <Button key={s.value} variant="outline" size="sm" disabled={busy} onClick={() => update({ status: s.value })}>
               {s.label}
             </Button>
@@ -140,7 +136,11 @@ export function BookingCard({ b, onChange }: { b: Booking; onChange: () => void 
               setNotes(e.target.value)
               setSavedNotes(false)
             }}
-            placeholder="Only you see these. e.g. “Quoted $400, waiting to hear back.”"
+            placeholder={
+              leasing
+                ? 'Only you see these. e.g. “Toured Tuesday, sending the application.”'
+                : 'Only you see these. e.g. “Quoted $400, waiting to hear back.”'
+            }
           />
         </div>
         <div className="flex flex-wrap items-center gap-3">
