@@ -1,6 +1,6 @@
 'use client'
 
-// Bookings: inquiries sent from the Music Hall form. Each can be marked
+// Hall requests: inquiries sent from the Book the hall form. Each can be marked
 // replied / booked / declined and carry private notes.
 
 import { useState, type FormEvent } from 'react'
@@ -73,8 +73,8 @@ function FormChoice({ onSignedOut }: { onSignedOut: () => void }) {
             <>
               <p className="text-ink-2">
                 {current
-                  ? 'The site’s own form. Inquiries show up on this page.'
-                  : 'The site uses its own form now. Inquiries show up on this page.'}
+                  ? 'The site’s own form. Requests show up on this page.'
+                  : 'The site uses its own form now. Requests show up on this page.'}
               </p>
               {current && (
                 <div>
@@ -124,7 +124,7 @@ function FormChoice({ onSignedOut }: { onSignedOut: () => void }) {
   )
 }
 
-export default function BookingsPage() {
+export default function HallRequestsPage() {
   const { refresh, signedOut } = useAdmin()
   const { data, error, reload } = useLoad(() => getJson<Booking[]>('bookings'), signedOut)
   const [filter, setFilter] = useState<'open' | 'all'>('open')
@@ -132,12 +132,12 @@ export default function BookingsPage() {
   const shown = (data ?? []).filter((b) => filter === 'all' || b.status === 'new' || b.status === 'replied')
   const changed = () => {
     reload()
-    refresh() // update the "new" badge on the Bookings tab
+    refresh() // update the "new" badge on the Hall requests tab
   }
 
   return (
     <>
-      <PageHeader title="Bookings" description="Inquiries sent through the form on the Music Hall page." />
+      <PageHeader title="Hall booking requests" description="Requests to book the hall, sent through the form on the Book the hall page." />
       <FormChoice onSignedOut={signedOut} />
       <ToggleGroup
         type="single"
@@ -154,7 +154,7 @@ export default function BookingsPage() {
       <ErrorNote>{error}</ErrorNote>
       {data && shown.length === 0 && (
         <EmptyState>
-          {filter === 'open' ? 'You’re all caught up. Nothing new or waiting on a reply.' : 'No inquiries yet.'}
+          {filter === 'open' ? 'You’re all caught up. Nothing new or waiting on a reply.' : 'No requests yet.'}
         </EmptyState>
       )}
       <div className="flex flex-col gap-4">

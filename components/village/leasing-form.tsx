@@ -26,7 +26,7 @@ const schema = z.object({
 })
 type Values = z.input<typeof schema>
 
-/** Leasing inquiry. Goes through /api/inquiry, so it lands in /admin → Bookings and Tom's inbox. */
+/** Leasing inquiry. Goes through /api/inquiry, so it lands in /admin → Hall requests and Tom's inbox. */
 export function LeasingForm() {
   const [status, setStatus] = useState<'idle' | 'error' | 'sent'>('idle')
   const guard = useSpamGuard()

@@ -137,7 +137,7 @@ async function addAdmin(me: Admin, b: Body) {
     text: [
       `Hi ${name.split(' ')[0]},`,
       '',
-      `${me.name} added you as an admin of sunsetvillagesf.com. You can edit events and shops, see booking inquiries and ticket sales, and send newsletter announcements.`,
+      `${me.name} added you as an admin of sunsetvillagesf.com. You can edit events and shops, see hall booking requests and ticket sales, and send newsletter announcements.`,
       '',
       `Sign in at ${SITE_URL}/admin with this email address (${email}).`,
       `${me.name} will give you a temporary password. Change it under Team → Your password once you’re in.`,
@@ -633,7 +633,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
         case 'announce':
           return ok(await sendAnnouncement(b))
         case 'booking-form': {
-          // Blank = the site's own form (inquiries land under Bookings).
+          // Blank = the site's own form (requests land under Hall requests).
           const url = opt(b.url, 500)
           if (url && !/^https:\/\/(docs\.google\.com\/forms\/|forms\.gle\/)/.test(url)) {
             throw new BadRequest('Paste the Google Form’s share link (it starts with https://docs.google.com/forms/ or https://forms.gle/)')

@@ -54,8 +54,8 @@ export default function OverviewPage() {
       {data && (
         <div className="flex flex-col gap-5">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Stat label="New inquiries" value={data.counts.new_bookings} href="/admin/bookings" />
-            <Stat label="Waiting on a reply" value={data.counts.waiting_bookings} href="/admin/bookings" />
+            <Stat label="New hall requests" value={data.counts.new_bookings} href="/admin/requests" />
+            <Stat label="Waiting on a reply" value={data.counts.waiting_bookings} href="/admin/requests" />
             <Stat
               label="Tickets, last 30 days"
               value={`${data.counts.tickets_30d} · ${dollars(data.counts.revenue_30d)}`}
@@ -65,9 +65,9 @@ export default function OverviewPage() {
           </div>
 
           <div className="grid gap-5 md:grid-cols-2">
-            <Panel title="Latest inquiries" action={seeAll('/admin/bookings')}>
+            <Panel title="Latest hall requests" action={seeAll('/admin/requests')}>
               {data.bookings.length === 0 ? (
-                <EmptyState>No inquiries yet.</EmptyState>
+                <EmptyState>No requests yet.</EmptyState>
               ) : (
                 <ul className="divide-y divide-border">
                   {data.bookings.map((b) => (
