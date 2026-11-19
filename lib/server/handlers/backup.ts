@@ -55,7 +55,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
         {
           filename: `bookings-${day}.csv`,
           content: Buffer.from(
-            toCsv(bookings, ['created_at', 'name', 'email', 'type', 'date', 'headcount', 'message', 'status', 'notes', 'archived_at']),
+            toCsv(bookings, ['created_at', 'kind', 'name', 'email', 'type', 'space', 'date', 'headcount', 'message', 'status', 'notes', 'archived_at']),
           ).toString('base64'),
         },
         {

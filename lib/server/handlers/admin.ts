@@ -6,6 +6,7 @@
 // BLOB_STORE_ID or BLOB_READ_WRITE_TOKEN (image uploads), RESEND_API_KEY + INQUIRY_FROM
 // (emails), STRIPE_SECRET_KEY (online tickets).
 
+import { isStatusFor, type RequestKind } from '@/lib/requests'
 import { put } from '@vercel/blob'
 import { query, hasDb, eventFromRow, tenantFromRow, getSettings } from '../db'
 import {
@@ -221,8 +222,8 @@ async function overview() {
   const [[counts], bookings, orders, upcoming] = await Promise.all([
     query<Record<string, number>>(
       `select
-         (select count(*)::int from bookings where status = 'new' and archived_at is null) as new_bookings,
-         (select count(*)::int from bookings where status = 'replied' and archived_at is null) as waiting_bookings,
+         (select count(*)::int from bookings where kind = 'hall' and status = 'new' and archived_at is null) as new_bookings,
+         (select count(*)::int from bookings where kind = 'leasing' and status = 'new' and archived_at is null) as new_leasing,
          (select count(*)::int from subscribers where unsubscribed_at is null) as subscribers,
          (select coalesce(sum(quantity), 0)::int from orders where refunded_at is null and created_at > now() - interval '30 days') as tickets_30d,
          (select coalesce(sum(amount_cents), 0)::int from orders where refunded_at is null and created_at > now() - interval '30 days') as revenue_30d`,
@@ -530,8 +531,9 @@ export default async function handler(req: VercelReq, res: VercelRes) {
     }
 
     if (action === 'me') {
-      const [{ n }] = await query<{ n: number }>(
-        `select count(*)::int as n from bookings where status = 'new' and archived_at is null`,
+      const [{ hall, leasing }] = await query<{ hall: number; leasing: number }>(
+        `select count(*) filter (where kind = 'hall')::int as hall, count(*) filter (where kind = 'leasing')::int as leasing
+         from bookings where status = 'new' and archived_at is null`,
       )
       return ok({
         admin: me,
@@ -541,7 +543,8 @@ export default async function handler(req: VercelReq, res: VercelRes) {
         calendar: hasCalendar(),
         payments: hasStripe(),
         backups: Boolean(process.env.CRON_SECRET) && hasEmail() && inquiryTo().length > 0,
-        newBookings: n,
+        newBookings: hall,
+        newLeasing: leasing,
         // Still signing in with the shared setup password: nudge them to pick their own.
         usingSetupPassword: checkPassword(
           process.env.ADMIN_PASSWORD!,
@@ -558,7 +561,9 @@ export default async function handler(req: VercelReq, res: VercelRes) {
         case 'tenants':
           return ok((await query(`select * from tenants order by sort, name`)).map(tenantFromRow))
         case 'bookings':
-          return ok(await query(`select * from bookings where archived_at is null order by created_at desc`))
+          return ok(await query(`select * from bookings where kind = 'hall' and archived_at is null order by created_at desc`))
+        case 'leasing':
+          return ok(await query(`select * from bookings where kind = 'leasing' and archived_at is null order by created_at desc`))
         case 'subscribers':
           return ok(await query(`select id, email, created_at, unsubscribed_at from subscribers order by created_at desc`))
         case 'announcements':
@@ -604,7 +609,10 @@ export default async function handler(req: VercelReq, res: VercelRes) {
           return ok({ ok: true })
         }
         case 'booking-update': {
-          const status = ['new', 'replied', 'booked', 'declined'].includes(b.status) ? b.status : 'new'
+          const [row] = await query<{ kind: RequestKind }>(`select kind from bookings where id = $1`, [Number(b.id)])
+          if (!row) throw new BadRequest('That request no longer exists')
+          if (!isStatusFor(row.kind, b.status)) throw new BadRequest('Unknown status')
+          const status = b.status
           await query(`update bookings set status = $2, notes = $3 where id = $1`, [
             Number(b.id),
             status,

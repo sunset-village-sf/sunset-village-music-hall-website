@@ -133,6 +133,12 @@ const schema = [
   `alter table bookings add column if not exists phone text`,
   `alter table bookings add column if not exists backup_date text`,
   `alter table bookings add column if not exists needs text`,
+  // Hall booking requests and leasing inquiries share this table; leasing has its own stages.
+  `alter table bookings add column if not exists kind text not null default 'hall'`,
+  `alter table bookings add column if not exists space text`,
+  // Leasing inquiries saved before \`kind\` existed are marked only by their type, e.g. "Leasing · Retail".
+  `update bookings set kind = 'leasing', space = coalesce(space, nullif(regexp_replace(type, '^Leasing · ', ''), ''))
+   where kind = 'hall' and type like 'Leasing · %'`,
   `create table if not exists admins (
     id serial primary key,
     email text not null unique,

@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge'
 interface Overview {
   counts: {
     new_bookings: number
-    waiting_bookings: number
+    new_leasing: number
     subscribers: number
     tickets_30d: number
     revenue_30d: number
@@ -55,7 +55,7 @@ export default function OverviewPage() {
         <div className="flex flex-col gap-5">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <Stat label="New hall requests" value={data.counts.new_bookings} href="/admin/requests" />
-            <Stat label="Waiting on a reply" value={data.counts.waiting_bookings} href="/admin/requests" />
+            <Stat label="New leasing inquiries" value={data.counts.new_leasing} href="/admin/leasing" />
             <Stat
               label="Tickets, last 30 days"
               value={`${data.counts.tickets_30d} · ${dollars(data.counts.revenue_30d)}`}
@@ -65,7 +65,7 @@ export default function OverviewPage() {
           </div>
 
           <div className="grid gap-5 md:grid-cols-2">
-            <Panel title="Latest hall requests" action={seeAll('/admin/requests')}>
+            <Panel title="Latest requests" action={seeAll('/admin/requests')}>
               {data.bookings.length === 0 ? (
                 <EmptyState>No requests yet.</EmptyState>
               ) : (
