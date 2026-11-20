@@ -7,6 +7,8 @@ export interface Artist {
   instagram?: string
   /** Full Facebook page or profile URL. */
   facebook?: string
+  /** Their own website, as a full https:// (or http://) URL. */
+  website?: string
   /** At most one per event. */
   headliner?: boolean
 }
@@ -45,3 +47,27 @@ export function facebookUrl(input: string): string | null {
 }
 
 export const instagramUrl = (handle: string) => `https://www.instagram.com/${handle}/`
+
+/**
+ * "lowtidechoir.com", "www.lowtidechoir.com/" or "https://lowtidechoir.bandcamp.com"
+ * → a full URL. Null if it isn't a web address, or if it's Instagram or Facebook
+ * (those have their own fields).
+ */
+export function websiteUrl(input: string): string | null {
+  const s = input.trim()
+  if (!s || /\s/.test(s) || s.length > 300) return null
+  let url: URL
+  try {
+    url = new URL(/^https?:\/\//i.test(s) ? s : `https://${s}`)
+  } catch {
+    return null
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return null
+  if (url.username || url.password || !/^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/i.test(url.hostname)) return null
+  if (/(^|\.)(instagram\.com|instagr\.am|facebook\.com|fb\.com)$/i.test(url.hostname)) return null
+  const href = url.toString()
+  return url.pathname === '/' && !url.search && !url.hash ? href.slice(0, -1) : href
+}
+
+/** "https://www.lowtidechoir.com/music" → "lowtidechoir.com", for link text. */
+export const websiteLabel = (url: string) => new URL(url).hostname.replace(/^www\./i, '')
