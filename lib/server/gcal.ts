@@ -15,10 +15,17 @@
 
 import { createHash, createSign } from 'node:crypto'
 import { SITE_URL } from './email'
-import { fullAddress } from '@/lib/data/site'
+import {
+  calendarDescription,
+  calendarLocation,
+  calendarTimes,
+  eventPageUrl,
+  type CalendarSource,
+} from '@/lib/event-calendar'
 
-const TZ = 'America/Los_Angeles'
-const DEFAULT_LENGTH_MIN = 180
+export type { CalendarSource }
+export { calendarTimes }
+
 const API = 'https://www.googleapis.com/calendar/v3'
 
 interface ServiceAccount {
@@ -93,59 +100,14 @@ async function gcal(method: string, path: string, body?: unknown): Promise<Respo
 /** Calendar event IDs allow a–v and 0–9 only; a hex hash fits. */
 export const calendarEventId = (siteId: string) => `sv${createHash('sha1').update(siteId).digest('hex')}`
 
-export interface CalendarSource {
-  id: string
-  title: string
-  date: string // yyyy-mm-dd
-  startTime?: string | null // HH:MM, 24h, Pacific
-  endTime?: string | null
-  venue?: string | null
-  kind?: string | null
-  subtitle?: string | null
-  summary?: string | null
-  details?: string | null
-  price?: string | null
-  ticketUrl?: string | null
-}
-
-const addDays = (date: string, n: number) => {
-  const d = new Date(`${date}T12:00:00Z`)
-  d.setUTCDate(d.getUTCDate() + n)
-  return d.toISOString().slice(0, 10)
-}
-const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5))
-const fromMin = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
-
-/** Start/end in Google's format. No start time → all-day. End before start → next day (e.g. "til 2am"). */
-export function calendarTimes(e: Pick<CalendarSource, 'date' | 'startTime' | 'endTime'>) {
-  if (!e.startTime) return { start: { date: e.date }, end: { date: addDays(e.date, 1) } }
-  const start = toMin(e.startTime)
-  let end = e.endTime ? toMin(e.endTime) : start + DEFAULT_LENGTH_MIN
-  if (e.endTime && end <= start) end += 24 * 60
-  const endDate = addDays(e.date, Math.floor(end / (24 * 60)))
-  return {
-    start: { dateTime: `${e.date}T${e.startTime}:00`, timeZone: TZ },
-    end: { dateTime: `${endDate}T${fromMin(end % (24 * 60))}:00`, timeZone: TZ },
-  }
-}
-
 export function calendarEvent(e: CalendarSource) {
-  const page = `${SITE_URL}/events/${encodeURIComponent(e.id)}`
-  const description = [
-    [e.kind, e.subtitle].filter(Boolean).join(' · '),
-    e.details ?? e.summary,
-    e.price ? `Price: ${e.price}` : '',
-    e.ticketUrl ? `Tickets: ${e.ticketUrl}` : '',
-    `Event page: ${page}`,
-  ]
-    .filter(Boolean)
-    .join('\n\n')
+  const page = eventPageUrl(SITE_URL, e.id)
   return {
     id: calendarEventId(e.id),
     status: 'confirmed',
     summary: e.title,
-    description,
-    location: `${e.venue ?? 'Music Hall'}, ${fullAddress}`,
+    description: calendarDescription(e, page),
+    location: calendarLocation(e),
     ...calendarTimes(e),
     source: { title: 'Sunset Village Music Hall', url: page },
   }

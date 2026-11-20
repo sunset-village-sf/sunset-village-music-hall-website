@@ -9,6 +9,8 @@ import { Facts, Section } from '@/components/layout/section'
 import { PosterArt } from '@/components/events/poster-art'
 import { TicketBox } from '@/components/events/ticket-box'
 import { Lineup, billing } from '@/components/events/lineup'
+import { SaveShare } from '@/components/events/save-share'
+import { eventPageUrl, googleCalendarLink } from '@/lib/event-calendar'
 import { loadContent } from '@/lib/server/content'
 import { instagramUrl } from '@/lib/artists'
 import { categoryOf, dateParts, longDate, priceLine, sellsOnline } from '@/lib/events'
@@ -52,6 +54,7 @@ export default async function EventPage({ params }: Props) {
       ? billing(event.artists).map((a) => ({
           '@type': 'PerformingGroup',
           name: a.name,
+          url: a.website,
           sameAs: [a.instagram && instagramUrl(a.instagram), a.facebook].filter(Boolean),
         }))
       : undefined,
@@ -113,6 +116,12 @@ export default async function EventPage({ params }: Props) {
           ) : (
             <p className="text-ink-2">{price ? 'Pay at the door.' : 'Free.'} No advance tickets for this one.</p>
           )}
+          <SaveShare
+            title={event.title}
+            url={eventPageUrl(site.url, event.id)}
+            googleCalendar={isPast ? undefined : googleCalendarLink(event, site.url)}
+            icsHref={isPast ? undefined : `/events/${encodeURIComponent(event.id)}/calendar.ics`}
+          />
         </aside>
       </Section>
     </>

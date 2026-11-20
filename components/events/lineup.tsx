@@ -1,7 +1,7 @@
 // The event page's lineup: who's playing, headliner first, with links to
-// each artist's Instagram and Facebook. Renders nothing without artists.
+// each artist's Instagram, Facebook and website. Renders nothing without artists.
 import type { Artist } from '@/lib/artists'
-import { instagramUrl } from '@/lib/artists'
+import { instagramUrl, websiteLabel } from '@/lib/artists'
 import { Badge } from '@/components/ui/badge'
 
 /** Headliner first, everyone else in billing order. */
@@ -29,7 +29,7 @@ export function Lineup({ artists }: { artists?: Artist[] }) {
                 </Badge>
               )}
             </span>
-            {(a.instagram || a.facebook) && (
+            {(a.instagram || a.facebook || a.website) && (
               <span className="flex flex-wrap gap-x-5 gap-y-1">
                 {a.instagram && (
                   <a href={instagramUrl(a.instagram)} target="_blank" rel="noopener" className="font-bold">
@@ -39,6 +39,12 @@ export function Lineup({ artists }: { artists?: Artist[] }) {
                 {a.facebook && (
                   <a href={a.facebook} target="_blank" rel="noopener" className="font-bold">
                     <span className="sr-only">{a.name} on </span>Facebook ↗
+                  </a>
+                )}
+                {a.website && (
+                  <a href={a.website} target="_blank" rel="noopener" className="font-bold">
+                    <span className="sr-only">{a.name}’s website: </span>
+                    {websiteLabel(a.website)} ↗
                   </a>
                 )}
               </span>

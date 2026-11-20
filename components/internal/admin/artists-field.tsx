@@ -1,16 +1,16 @@
 'use client'
 
 // The lineup editor in the event form: any number of artists, each with a
-// name, Instagram and Facebook, one optionally marked as headliner.
+// name, Instagram, Facebook and website, one optionally marked as headliner.
 //
 // Made for fast entry: type a name, press Enter for the next row. Names used
 // at earlier events are suggested, and picking one fills in their socials.
-// Pasted profile links are tidied to a username / page link when you leave
+// Pasted links are tidied to a username / page link / full URL when you leave
 // the field, with a "Check" link to make sure it's the right account.
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { ChevronDown, ChevronUp, ExternalLink, Plus, Star, X } from 'lucide-react'
-import { MAX_ARTISTS, facebookUrl, instagramHandle, instagramUrl, type Artist } from '@/lib/artists'
+import { MAX_ARTISTS, facebookUrl, instagramHandle, instagramUrl, websiteUrl, type Artist } from '@/lib/artists'
 import { EmptyState, FormField } from '@/components/internal/internal-ui'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,29 +25,36 @@ const newKey = () => `artist-${++nextKey}`
 export const toArtistDrafts = (artists: Artist[] = []): ArtistDraft[] => artists.map((a) => ({ ...a, key: newKey() }))
 const blank = (): ArtistDraft => ({ key: newKey(), name: '' })
 
-type Social = 'instagram' | 'facebook'
-const parse: Record<Social, (s: string) => string | null> = { instagram: instagramHandle, facebook: facebookUrl }
+type Social = 'instagram' | 'facebook' | 'website'
+const SOCIALS = ['instagram', 'facebook', 'website'] as const
+const parse: Record<Social, (s: string) => string | null> = {
+  instagram: instagramHandle,
+  facebook: facebookUrl,
+  website: websiteUrl,
+}
 const problem: Record<Social, string> = {
   instagram: 'Use their username, like @lowtidechoir, or paste their profile link.',
   facebook: 'Paste their Facebook page link, like facebook.com/lowtidechoir.',
+  website: 'Paste their website’s address, like lowtidechoir.com. Instagram and Facebook go in their own fields.',
 }
 
 /** The first social field that won't save, so the form can point at it. */
 export function firstBadSocial(artists: ArtistDraft[]): string | null {
   for (const a of artists)
-    for (const f of ['instagram', 'facebook'] as const) if (a[f] && !parse[f](a[f])) return `${a.key}-${f}`
+    for (const f of SOCIALS) if (a[f] && !parse[f](a[f])) return `${a.key}-${f}`
   return null
 }
 
 /** Tidy every social link before saving (the API checks them too). */
 export const tidyArtists = (artists: ArtistDraft[]): Artist[] =>
   artists
-    .filter((a) => a.name.trim() || a.instagram || a.facebook)
+    .filter((a) => a.name.trim() || a.instagram || a.facebook || a.website)
     .map(({ key: _key, ...a }) => ({
       ...a,
       name: a.name.trim(),
       instagram: a.instagram ? (instagramHandle(a.instagram) ?? a.instagram) : undefined,
       facebook: a.facebook ? (facebookUrl(a.facebook) ?? a.facebook) : undefined,
+      website: a.website ? (websiteUrl(a.website) ?? a.website) : undefined,
     }))
 
 export function ArtistsField({
@@ -88,9 +95,8 @@ export function ArtistsField({
   function fromKnown(a: ArtistDraft, name: string): Partial<Artist> {
     const match = byName.get(name.trim().toLowerCase())
     const fill: Partial<Artist> = {}
-    if (match && !a.instagram && match.instagram) fill.instagram = match.instagram
-    if (match && !a.facebook && match.facebook) fill.facebook = match.facebook
-    if (fill.instagram || fill.facebook) setAnnounce(`Filled in ${match!.name}’s socials from an earlier event.`)
+    for (const f of SOCIALS) if (match && !a[f] && match[f]) fill[f] = match[f]
+    if (Object.keys(fill).length) setAnnounce(`Filled in ${match!.name}’s links from an earlier event.`)
     return fill
   }
 
@@ -103,7 +109,7 @@ export function ArtistsField({
 
   function leaveName(a: ArtistDraft) {
     const fill = fromKnown(a, a.name)
-    if (fill.instagram || fill.facebook) update(a.key, fill)
+    if (Object.keys(fill).length) update(a.key, fill)
   }
 
   function leave(a: ArtistDraft, f: Social) {
@@ -172,6 +178,7 @@ export function ArtistsField({
               a[f] && !parse[f](a[f]!) && (showErrors || left.has(`${a.key}-${f}`)) ? problem[f] : undefined
             const ig = a.instagram ? instagramHandle(a.instagram) : null
             const fb = a.facebook ? facebookUrl(a.facebook) : null
+            const web = a.website ? websiteUrl(a.website) : null
             return (
               <li
                 key={a.key}
@@ -244,7 +251,7 @@ export function ArtistsField({
                     <X />
                   </Button>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 sm:pl-10">
+                <div className="grid gap-3 sm:grid-cols-2 sm:pl-10 xl:grid-cols-3">
                   <FormField
                     label="Instagram"
                     htmlFor={`${a.key}-instagram`}
@@ -291,6 +298,27 @@ export function ArtistsField({
                       aria-invalid={Boolean(err('facebook'))}
                     />
                   </FormField>
+                  <FormField
+                    label="Website"
+                    htmlFor={`${a.key}-website`}
+                    error={err('website')}
+                    hint={web ? <CheckLink href={web} label="Check the link" /> : undefined}
+                  >
+                    <Input
+                      density="compact"
+                      id={`${a.key}-website`}
+                      inputMode="url"
+                      autoComplete="off"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      value={a.website ?? ''}
+                      onChange={(e) => update(a.key, { website: e.target.value })}
+                      onBlur={() => leave(a, 'website')}
+                      onKeyDown={(e) => onEnter(e, i)}
+                      placeholder="their-band.com"
+                      aria-invalid={Boolean(err('website'))}
+                    />
+                  </FormField>
                 </div>
               </li>
             )
@@ -312,7 +340,7 @@ export function ArtistsField({
         </Button>
         <p className="text-meta text-ink-2">
           {value.length === 0
-            ? 'Optional. Socials are used to tag artists when we post.'
+            ? 'Optional. Socials are used to tag artists when we post; links show on the event’s page.'
             : multiple
               ? 'Listed in billing order. Press Enter in a row to add the next artist.'
               : 'Press Enter to add the next artist.'}
@@ -322,10 +350,10 @@ export function ArtistsField({
   )
 }
 
-function CheckLink({ href }: { href: string }) {
+function CheckLink({ href, label = 'Check it’s them' }: { href: string; label?: string }) {
   return (
     <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold">
-      Check it’s them <ExternalLink className="size-3" aria-hidden />
+      {label} <ExternalLink className="size-3" aria-hidden />
       <span className="sr-only">(opens in a new tab)</span>
     </a>
   )

@@ -38,7 +38,7 @@ import {
 } from '../email'
 import { str, opt, clientIp, isEmail, type VercelReq, type VercelRes } from '../http'
 import { ALL_PLACES, showsOn, type DisplayPlace, type VillageEvent } from '@/lib/data/events'
-import { MAX_ARTISTS, facebookUrl, instagramHandle, type Artist } from '@/lib/artists'
+import { MAX_ARTISTS, facebookUrl, instagramHandle, websiteUrl, type Artist } from '@/lib/artists'
 
 type Body = Record<string, any>
 
@@ -269,7 +269,7 @@ function cleanDisplay(v: unknown): DisplayPlace[] {
   return ALL_PLACES.filter((p) => v.includes(p))
 }
 
-/** The lineup: drops empty rows, tidies social links, keeps at most one headliner. */
+/** The lineup: drops empty rows, tidies social and website links, keeps at most one headliner. */
 function cleanArtists(v: unknown): Artist[] {
   const rows = (Array.isArray(v) ? v : []) as Body[]
   const out: Artist[] = []
@@ -277,14 +277,17 @@ function cleanArtists(v: unknown): Artist[] {
     const name = opt(r?.name, 100)
     const ig = opt(r?.instagram, 200)
     const fb = opt(r?.facebook, 300)
-    if (!name && !ig && !fb) continue
+    const web = opt(r?.website, 300)
+    if (!name && !ig && !fb && !web) continue
     if (!name) throw new BadRequest('Give each artist a name')
     const instagram = ig ? instagramHandle(ig) : null
     if (ig && !instagram) throw new BadRequest(`${name}’s Instagram doesn’t look like a username`)
     const facebook = fb ? facebookUrl(fb) : null
     if (fb && !facebook) throw new BadRequest(`${name}’s Facebook doesn’t look like a Facebook page`)
+    const website = web ? websiteUrl(web) : null
+    if (web && !website) throw new BadRequest(`${name}’s website doesn’t look like a web address`)
     const headliner = r.headliner === true && !out.some((a) => a.headliner)
-    out.push({ name, ...(instagram && { instagram }), ...(facebook && { facebook }), ...(headliner && { headliner }) })
+    out.push({ name, ...(instagram && { instagram }), ...(facebook && { facebook }), ...(website && { website }), ...(headliner && { headliner }) })
   }
   if (out.length > MAX_ARTISTS) throw new BadRequest(`Up to ${MAX_ARTISTS} artists per event`)
   return out
