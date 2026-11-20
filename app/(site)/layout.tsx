@@ -1,5 +1,6 @@
 import { SiteHeader } from '@/components/site/site-header'
 import { SiteFooter } from '@/components/site/site-footer'
+import { Analytics } from '@/components/site/analytics'
 
 export default function SiteLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -13,6 +14,7 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
       <SiteHeader />
       <main id="main">{children}</main>
       <SiteFooter />
+      <Analytics />
     </>
   )
 }
