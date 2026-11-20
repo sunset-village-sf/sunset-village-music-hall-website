@@ -1,7 +1,8 @@
 'use client'
 
-// Newsletter: write and send an announcement to everyone signed up, see
-// past announcements, and manage the subscriber list.
+// Newsletter: send the weekly Village Voice (built from the calendar) or a
+// one-off announcement to everyone signed up, see what went out, and manage
+// the subscriber list.
 
 import { useState, type FormEvent } from 'react'
 import { getJson, postJson, type Announcement, type Setup, type Subscriber } from '@/lib/admin/api'
@@ -15,6 +16,8 @@ import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { VoiceComposer } from '@/components/internal/admin/voice-composer'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 const DRAFT_KEY = 'sv-admin-announcement-draft'
@@ -108,7 +111,7 @@ function Composer({ setup, active, onSent }: { setup: Setup; active: number; onS
         <FormField
           label="Message"
           htmlFor="ann-body"
-          hint="Plain text. Leave a blank line between paragraphs. Links are clickable automatically. An unsubscribe link is added at the bottom."
+          hint="Plain text. Leave a blank line between paragraphs. Links are clickable automatically. It goes out in the Village Voice frame, with the subject as the headline and an unsubscribe link at the bottom."
         >
           <Textarea
             density="compact"
@@ -186,6 +189,7 @@ export default function NewsletterPage() {
   const [adding, setAdding] = useState('')
   const [error, setError] = useState('')
   const [openId, setOpenId] = useState<number | null>(null)
+  const [mode, setMode] = useState<'voice' | 'announcement'>('voice')
 
   const list = subs.data ?? []
   const active = list.filter((s) => !s.unsubscribed_at)
@@ -222,10 +226,31 @@ export default function NewsletterPage() {
         }
       />
       <div className="flex flex-col gap-5">
-        <Composer setup={me} active={active.length} onSent={past.reload} />
+        {me.email ? (
+          <>
+            <ToggleGroup
+              type="single"
+              size="sm"
+              spacing={2}
+              value={mode}
+              onValueChange={(v) => v && setMode(v as typeof mode)}
+              aria-label="What to send"
+            >
+              <ToggleGroupItem value="voice">Weekly Village Voice</ToggleGroupItem>
+              <ToggleGroupItem value="announcement">One-off announcement</ToggleGroupItem>
+            </ToggleGroup>
+            {mode === 'voice' ? (
+              <VoiceComposer active={active.length} onSent={past.reload} />
+            ) : (
+              <Composer setup={me} active={active.length} onSent={past.reload} />
+            )}
+          </>
+        ) : (
+          <Composer setup={me} active={active.length} onSent={past.reload} />
+        )}
 
         {past.data && past.data.length > 0 && (
-          <Panel title="Sent announcements">
+          <Panel title="Sent">
             <ul className="divide-y divide-border">
               {past.data.map((a) => {
                 const open = openId === a.id

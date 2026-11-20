@@ -30,12 +30,20 @@ import {
   inquiryTo,
   sendEmail,
   sendBatch,
-  announcementHtml,
-  announcementText,
   unsubscribeUrl,
   SITE_URL,
   type Email,
 } from '../email'
+import {
+  announcementHtml,
+  announcementText,
+  defaultSubject,
+  issueHtml,
+  issueText,
+  type Issue,
+} from '../newsletter-email'
+import { loadContent } from '../content'
+import { todayISO, upcoming } from '@/lib/events'
 import { str, opt, clientIp, isEmail, type VercelReq, type VercelRes } from '../http'
 import { ALL_PLACES, showsOn, type DisplayPlace, type VillageEvent } from '@/lib/data/events'
 import { MAX_ARTISTS, facebookUrl, instagramHandle, websiteUrl, type Artist } from '@/lib/artists'
@@ -537,23 +545,21 @@ async function upload(b: Body) {
   return { url: blob.url }
 }
 
-// ── Announcements ──────────────────────────────────────────────────────
+// ── Newsletter: announcements and the weekly Village Voice ─────────────
 
-async function sendAnnouncement(b: Body) {
+type Render = (unsub: string) => { text: string; html: string }
+
+/**
+ * A test to one address, or the real send to every active subscriber (each
+ * with their own unsubscribe link), logged under Sent in the admin.
+ */
+async function sendToList(b: Body, subject: string, render: Render, logBody: string) {
   if (!hasEmail()) throw new BadRequest('Email sending isn’t set up yet')
-  const subject = need(opt(b.subject, 200), 'Subject')
-  const body = need(opt(b.body, 20000), 'Message')
 
   if (b.test) {
     const to = opt(b.testTo, 200) ?? inquiryTo()[0] ?? ''
     if (!isEmail(to)) throw new BadRequest('Enter an email address to send the test to')
-    const unsub = unsubscribeUrl('test-preview')
-    const ok = await sendEmail({
-      to: [to],
-      subject: `[Test] ${subject}`,
-      text: announcementText(body, unsub),
-      html: announcementHtml(body, unsub),
-    })
+    const ok = await sendEmail({ to: [to], subject: `[Test] ${subject}`, ...render(unsubscribeUrl('test-preview')) })
     if (!ok) throw new BadRequest('The test email didn’t go through')
     return { sent: 1, test: true }
   }
@@ -568,8 +574,7 @@ async function sendAnnouncement(b: Body) {
     return {
       to: [s.email],
       subject,
-      text: announcementText(body, unsub),
-      html: announcementHtml(body, unsub),
+      ...render(unsub),
       headers: {
         'List-Unsubscribe': `<${unsub}>`,
         'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
@@ -579,12 +584,80 @@ async function sendAnnouncement(b: Body) {
   const sent = await sendBatch(emails)
   await query(`insert into announcements (subject, body, recipients, sent) values ($1, $2, $3, $4)`, [
     subject,
-    body,
+    logBody,
     subs.length,
     sent,
   ])
   if (sent === 0) throw new BadRequest('The emails didn’t go through. Nothing was sent.')
   return { sent, total: subs.length }
+}
+
+/** Pictures in sent emails load from the live site (or this preview deployment). */
+function assetBase(req: VercelReq) {
+  const host = str(req.headers['x-forwarded-host'] ?? req.headers.host)
+  return !host || /^(localhost|127\.)/.test(host) ? SITE_URL : `https://${host}`
+}
+
+async function sendAnnouncement(b: Body, req: VercelReq) {
+  const subject = need(opt(b.subject, 200), 'Subject')
+  const body = need(opt(b.body, 20000), 'Message')
+  const assets = assetBase(req)
+  return sendToList(
+    b,
+    subject,
+    (unsub) => ({
+      text: announcementText(body, unsub),
+      html: announcementHtml(subject, body, { assets, unsubscribeUrl: unsub }),
+    }),
+    body,
+  )
+}
+
+const isoDate = (v: unknown) => {
+  const s = str(v)
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s)) ? s : null
+}
+const addDays = (iso: string, n: number) => {
+  const d = new Date(`${iso}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+
+/** The week's issue from the calendar: shows on the website from `start` for 7 days, plus the next few after. */
+async function buildIssue(b: Body): Promise<Issue> {
+  const start = isoDate(b.start) ?? todayISO()
+  const end = addDays(start, 6)
+  const events = upcoming((await loadContent()).events)
+  return {
+    start,
+    end,
+    note: opt(b.note, 3000) ?? undefined,
+    events: events.filter((e) => e.date >= start && e.date <= end),
+    later: events.filter((e) => e.date > end).slice(0, 5),
+  }
+}
+
+async function voicePreview(b: Body) {
+  const issue = await buildIssue(b)
+  return {
+    start: issue.start,
+    end: issue.end,
+    shows: issue.events.length,
+    defaultSubject: defaultSubject(issue.start, issue.end),
+    html: issueHtml(issue, { assets: '', unsubscribeUrl: '#' }),
+  }
+}
+
+async function sendVoice(b: Body, req: VercelReq) {
+  const issue = await buildIssue(b)
+  const subject = opt(b.subject, 200) ?? defaultSubject(issue.start, issue.end)
+  const assets = assetBase(req)
+  return sendToList(
+    b,
+    subject,
+    (unsub) => ({ text: issueText(issue, unsub), html: issueHtml(issue, { assets, unsubscribeUrl: unsub }) }),
+    issueText(issue, '').split('\n\n--\n')[0],
+  )
 }
 
 // ── Router ─────────────────────────────────────────────────────────────
@@ -726,7 +799,11 @@ export default async function handler(req: VercelReq, res: VercelRes) {
         case 'upload':
           return ok(await upload(b))
         case 'announce':
-          return ok(await sendAnnouncement(b))
+          return ok(await sendAnnouncement(b, req))
+        case 'voice-preview':
+          return ok(await voicePreview(b))
+        case 'voice-send':
+          return ok(await sendVoice(b, req))
         case 'booking-form': {
           // Blank = the site's own form (requests land under Hall requests).
           const url = opt(b.url, 500)
