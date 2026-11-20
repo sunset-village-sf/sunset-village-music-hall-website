@@ -3,14 +3,9 @@
 // this site's own database. Use a *sending-only* API key restricted to the
 // sunsetvillagesf.com domain so the key cannot reach any other site's lists.
 
-import tokens from '@/lib/tokens.json'
-import { site } from '@/lib/data/site'
+import { SITE_URL } from './newsletter-email'
 
-export const SITE_URL = 'https://sunsetvillagesf.com'
-
-// Email can't use the Tailwind classes, so colors come from the token file.
-const c = (k: keyof typeof tokens.color) => tokens.color[k].value
-export const emailFont = "'Bricolage Grotesque', Helvetica, Arial, sans-serif"
+export { SITE_URL, emailFont } from './newsletter-email'
 
 export const hasEmail = () => Boolean(process.env.RESEND_API_KEY && process.env.INQUIRY_FROM)
 
@@ -62,32 +57,5 @@ export async function sendBatch(emails: Email[]): Promise<number> {
   }
   return sent
 }
-
-const esc = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-
-/** Plain text announcement → simple HTML: paragraphs, line breaks, links. */
-export function announcementHtml(body: string, unsubscribeUrl: string): string {
-  const paras = body
-    .trim()
-    .split(/\n\s*\n/)
-    .map((p) =>
-      esc(p)
-        .replace(/(https?:\/\/[^\s<]+)/g, `<a href="$1" style="color:${c('sea')}">$1</a>`)
-        .replace(/\n/g, '<br>'),
-    )
-    .map((p) => `<p style="margin:0 0 16px">${p}</p>`)
-    .join('')
-  return `<div style="background:${c('fog')};padding:24px 12px">
-<div style="font-family:${emailFont};font-size:17px;line-height:1.5;color:${c('ink')};background:${c('paper')};border:2px solid ${c('ink')};border-radius:24px;max-width:560px;margin:0 auto;padding:28px">
-${paras}
-<hr style="border:none;border-top:1px solid ${c('line')};margin:28px 0 12px">
-<p style="font-size:13px;color:${c('ink-2')};margin:0">Sunset Village Music Hall · 4114 Judah St, San Francisco<br>
-You signed up for the ${site.newsletter} at sunsetvillagesf.com. <a href="${unsubscribeUrl}" style="color:${c('ink-2')}">Unsubscribe</a></p>
-</div></div>`
-}
-
-export const announcementText = (body: string, unsubscribeUrl: string) =>
-  `${body.trim()}\n\n--\nSunset Village · 4114 Judah St, San Francisco\nUnsubscribe: ${unsubscribeUrl}`
 
 export const unsubscribeUrl = (token: string) => `${SITE_URL}/api/newsletter?unsubscribe=${token}`
