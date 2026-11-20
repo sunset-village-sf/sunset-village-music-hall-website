@@ -257,6 +257,78 @@ async function overview() {
   }
 }
 
+// ── Analytics ──────────────────────────────────────────────────────────
+// Counted by /api/collect (see lib/server/handlers/collect.ts). Days are Pacific.
+// "Visitors" adds up each day's distinct visitors: someone who comes on two
+// days counts twice, because the visitor code changes daily by design.
+
+const ANALYTICS_DAYS = [7, 30, 90, 365]
+
+async function analytics(daysRaw: unknown) {
+  const days = ANALYTICS_DAYS.includes(Number(daysRaw)) ? Number(daysRaw) : 30
+  const TZ = `'America/Los_Angeles'`
+  const since = `((date_trunc('day', now() at time zone ${TZ}) - ($1::int - 1) * interval '1 day') at time zone ${TZ})`
+  const inRange = `at >= ${since}`
+  const [[totals], daily, pages, referrers, devices, events, [forms]] = await Promise.all([
+    query<Record<string, number>>(
+      `select
+         coalesce(sum(v), 0)::int as visitors,
+         (select count(*)::int from analytics where kind = 'view' and ${inRange}) as views,
+         (select count(*)::int from analytics where kind = 'ticket' and ${inRange}) as ticket_clicks,
+         (select count(distinct visitor || (at at time zone ${TZ})::date)::int from analytics
+           where kind = 'view' and referrer is not null and ${inRange}) as from_elsewhere
+       from (select count(distinct visitor) as v from analytics
+             where kind = 'view' and ${inRange} group by (at at time zone ${TZ})::date) d`,
+      [days],
+    ),
+    query(
+      `select to_char(d, 'YYYY-MM-DD') as day,
+              coalesce(count(distinct a.visitor), 0)::int as visitors,
+              count(a.id)::int as views
+       from generate_series((now() at time zone ${TZ})::date - ($1::int - 1), (now() at time zone ${TZ})::date, interval '1 day') d
+       left join analytics a on a.kind = 'view' and (a.at at time zone ${TZ})::date = d::date
+       group by d order by d`,
+      [days],
+    ),
+    query(
+      `select a.path, max(e.title) as title, count(*)::int as views, count(distinct a.visitor)::int as visitors
+       from analytics a left join events e on e.id = a.event_id
+       where a.kind = 'view' and a.${inRange}
+       group by a.path order by views desc limit 12`,
+      [days],
+    ),
+    query(
+      `select referrer, count(distinct visitor || (at at time zone ${TZ})::date)::int as visitors
+       from analytics where kind = 'view' and referrer is not null and ${inRange}
+       group by referrer order by visitors desc limit 10`,
+      [days],
+    ),
+    query(
+      `select device, count(distinct visitor || (at at time zone ${TZ})::date)::int as visitors
+       from analytics where kind = 'view' and ${inRange} group by device`,
+      [days],
+    ),
+    query(
+      `select e.id, e.title, e.date,
+              count(*) filter (where a.kind = 'view')::int as views,
+              count(*) filter (where a.kind = 'ticket')::int as ticket_clicks
+       from analytics a join events e on e.id = a.event_id
+       where a.${inRange}
+       group by e.id, e.title, e.date order by views desc, ticket_clicks desc limit 12`,
+      [days],
+    ),
+    query<Record<string, number>>(
+      `select
+         (select count(*)::int from bookings where kind = 'hall' and created_at >= ${since}) as hall_requests,
+         (select count(*)::int from bookings where kind = 'leasing' and created_at >= ${since}) as leasing_inquiries,
+         (select count(*)::int from subscribers where created_at >= ${since}) as signups,
+         (select coalesce(sum(quantity), 0)::int from orders where refunded_at is null and created_at >= ${since}) as tickets_sold`,
+      [days],
+    ),
+  ])
+  return { days, totals, daily, pages, referrers, devices, events, forms }
+}
+
 // ── Events ─────────────────────────────────────────────────────────────
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/ // 24h "HH:MM"
@@ -583,6 +655,8 @@ export default async function handler(req: VercelReq, res: VercelRes) {
           return ok(await query(`select * from announcements order by created_at desc limit 50`))
         case 'overview':
           return ok(await overview())
+        case 'analytics':
+          return ok(await analytics(req.query?.days))
         case 'settings':
           return ok(await getSettings())
         case 'orders':

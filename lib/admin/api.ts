@@ -101,3 +101,14 @@ export interface Order {
   checked_in: boolean
   refunded_at: string | null
 }
+
+export interface Analytics {
+  days: number
+  totals: { visitors: number; views: number; ticket_clicks: number; from_elsewhere: number }
+  daily: { day: string; visitors: number; views: number }[]
+  pages: { path: string; title: string | null; views: number; visitors: number }[]
+  referrers: { referrer: string; visitors: number }[]
+  devices: { device: 'mobile' | 'desktop'; visitors: number }[]
+  events: { id: string; title: string; date: string; views: number; ticket_clicks: number }[]
+  forms: { hall_requests: number; leasing_inquiries: number; signups: number; tickets_sold: number }
+}

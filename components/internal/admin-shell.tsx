@@ -37,6 +37,7 @@ const TABS = [
   { href: '/admin/leasing', label: 'Leasing', badge: 'newLeasing' as const },
   { href: '/admin/tickets', label: 'Tickets' },
   { href: '/admin/newsletter', label: 'Newsletter' },
+  { href: '/admin/analytics', label: 'Analytics' },
   { href: '/admin/shops', label: 'Shops' },
   { href: '/admin/brand', label: 'Brand' },
   { href: '/admin/team', label: 'Team' },

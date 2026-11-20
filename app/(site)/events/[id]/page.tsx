@@ -109,7 +109,7 @@ export default async function EventPage({ params }: Props) {
             </Suspense>
           ) : event.ticketUrl ? (
             <Button asChild variant="sun" size="lg" className="self-start">
-              <a href={event.ticketUrl} target="_blank" rel="noopener">
+              <a href={event.ticketUrl} target="_blank" rel="noopener" data-track="ticket" data-track-event={event.id}>
                 {event.cta || 'Get tickets'} ↗
               </a>
             </Button>

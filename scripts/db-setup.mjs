@@ -156,6 +156,21 @@ const schema = [
   `alter table admins alter column role set default 'member'`,
   // Which email alerts each person gets: hall, leasing, tickets, backup.
   `alter table admins add column if not exists alerts text[]`,
+  // Site analytics, kept here instead of a third-party service. No cookies,
+  // no IP addresses: `visitor` is a hash that changes every day, so a person
+  // can be counted once per day but not followed from one day to the next.
+  // kind: 'view' (a page was shown) or a click such as 'ticket'.
+  `create table if not exists analytics (
+    id bigserial primary key,
+    at timestamptz not null default now(),
+    kind text not null default 'view',
+    path text not null,
+    event_id text,
+    referrer text,
+    device text,
+    visitor text
+  )`,
+  `create index if not exists analytics_at on analytics (at)`,
 ]
 
 for (const stmt of schema) await sql.query(stmt)

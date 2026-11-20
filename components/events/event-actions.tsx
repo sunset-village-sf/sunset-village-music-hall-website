@@ -10,7 +10,7 @@ export function PrimaryEventButton({ event, size }: { event: VillageEvent; size?
   return (
     <Button asChild size={size} className={raised}>
       {a.external ? (
-        <a href={a.href} target="_blank" rel="noopener">
+        <a href={a.href} target="_blank" rel="noopener" data-track="ticket" data-track-event={event.id}>
           {a.label} ↗
         </a>
       ) : (
