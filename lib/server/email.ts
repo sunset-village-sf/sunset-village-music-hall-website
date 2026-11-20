@@ -21,7 +21,12 @@ export const inquiryTo = () =>
     .map((a) => a.trim())
     .filter(Boolean)
 
+/** INQUIRY_FROM with another mailbox on the same domain, e.g. bookings@ → leasing@. Keeps the display name. */
+export const fromMailbox = (mailbox: string) => (process.env.INQUIRY_FROM ?? '').replace(/[^\s<@]+@/, `${mailbox}@`)
+
 export interface Email {
+  /** Defaults to INQUIRY_FROM. */
+  from?: string
   to: string[]
   subject: string
   text: string

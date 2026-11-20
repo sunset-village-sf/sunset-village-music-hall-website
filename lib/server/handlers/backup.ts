@@ -1,11 +1,12 @@
 // Vercel cron: GET /api/backup, weekly (see vercel.json "crons").
-// Emails INQUIRY_TO spreadsheets (CSV) of every booking, ticket order, and
+// Emails the team members who get the weekly backup (see lib/server/alerts.ts) spreadsheets (CSV) of every booking, ticket order, and
 // newsletter subscriber, archived and unsubscribed included, so a copy of the records
 // always exists outside the database. Vercel signs cron calls with
 // CRON_SECRET; anything else is refused.
 
 import { query, hasDb } from '../db'
-import { hasEmail, inquiryTo } from '../email'
+import { hasEmail } from '../email'
+import { alertRecipients } from '../alerts'
 import { header, type VercelReq, type VercelRes } from '../http'
 
 const cell = (v: unknown) => {
@@ -21,7 +22,8 @@ export default async function handler(req: VercelReq, res: VercelRes) {
   if (!secret || header(req, 'authorization') !== `Bearer ${secret}`) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
-  if (!hasDb() || !hasEmail() || !inquiryTo().length) {
+  const to = hasDb() && hasEmail() ? await alertRecipients('backup') : []
+  if (!to.length) {
     return res.status(503).json({ error: 'Not configured' })
   }
 
@@ -41,7 +43,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
     headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       from: process.env.INQUIRY_FROM,
-      to: inquiryTo(),
+      to,
       subject: `Sunset Village weekly backup — ${day}`,
       text: [
         'Your weekly backup of the website records is attached. You don’t need to do anything;',
@@ -55,7 +57,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
         {
           filename: `bookings-${day}.csv`,
           content: Buffer.from(
-            toCsv(bookings, ['created_at', 'name', 'email', 'type', 'date', 'headcount', 'message', 'status', 'notes', 'archived_at']),
+            toCsv(bookings, ['created_at', 'kind', 'name', 'email', 'type', 'space', 'date', 'headcount', 'message', 'status', 'notes', 'archived_at']),
           ).toString('base64'),
         },
         {

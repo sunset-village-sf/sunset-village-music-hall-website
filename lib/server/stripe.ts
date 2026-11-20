@@ -9,6 +9,7 @@
 
 import { query } from './db'
 import { sendEmail, inquiryTo, SITE_URL } from './email'
+import { alertRecipients } from './alerts'
 
 export const hasStripe = () => Boolean(process.env.STRIPE_SECRET_KEY)
 
@@ -160,12 +161,15 @@ export async function recordSession(sessionId: string): Promise<Order | null> {
           '(N Judah to 46th Avenue)',
         ].join('\n'),
       }),
-    inquiryTo().length > 0 &&
-      sendEmail({
-        to: inquiryTo(),
-        subject: `Ticket sale: ${tix} for ${ev?.title ?? eventId}`,
-        text: `${name ?? '(no name)'} <${email}> bought ${tix} for ${what}. ${dollars(s.amount_total)}.\n\nDoor list: ${SITE_URL}/admin/tickets`,
-      }),
+    alertRecipients('tickets').then(
+      (to) =>
+        to.length > 0 &&
+        sendEmail({
+          to,
+          subject: `Ticket sale: ${tix} for ${ev?.title ?? eventId}`,
+          text: `${name ?? '(no name)'} <${email}> bought ${tix} for ${what}. ${dollars(s.amount_total)}.\n\nDoor list: ${SITE_URL}/admin/tickets`,
+        }),
+    ),
   ]).catch((e) => console.error('order emails failed', e))
   return order
 }

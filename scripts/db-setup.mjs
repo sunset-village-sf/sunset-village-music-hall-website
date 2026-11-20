@@ -133,6 +133,12 @@ const schema = [
   `alter table bookings add column if not exists phone text`,
   `alter table bookings add column if not exists backup_date text`,
   `alter table bookings add column if not exists needs text`,
+  // Hall booking requests and leasing inquiries share this table; leasing has its own stages.
+  `alter table bookings add column if not exists kind text not null default 'hall'`,
+  `alter table bookings add column if not exists space text`,
+  // Leasing inquiries saved before \`kind\` existed are marked only by their type, e.g. "Leasing · Retail".
+  `update bookings set kind = 'leasing', space = coalesce(space, nullif(regexp_replace(type, '^Leasing · ', ''), ''))
+   where kind = 'hall' and type like 'Leasing · %'`,
   `create table if not exists admins (
     id serial primary key,
     email text not null unique,
@@ -144,9 +150,26 @@ const schema = [
   )`,
   // When a "forgot password" email last went out, to stop repeat sends.
   `alter table admins add column if not exists reset_sent_at timestamptz`,
+  // Roles: admins manage the team, members use everything else. Everyone
+  // who existed before roles keeps full access; people added later default to member.
+  `alter table admins add column if not exists role text not null default 'admin'`,
+  `alter table admins alter column role set default 'member'`,
+  // Which email alerts each person gets: hall, leasing, tickets, backup.
+  `alter table admins add column if not exists alerts text[]`,
 ]
 
 for (const stmt of schema) await sql.query(stmt)
+
+// First run with alerts: whoever is in INQUIRY_TO (pass it in the env to seed)
+// keeps getting every alert. Everyone else starts with none.
+const inquiryTo = (process.env.INQUIRY_TO ?? '').split(',').map((a) => a.trim().toLowerCase()).filter(Boolean)
+await sql.query(
+  `update admins set alerts = case when lower(email) = any($1::text[]) then '{hall,leasing,tickets,backup}'::text[] else '{}'::text[] end
+   where alerts is null`,
+  [inquiryTo],
+)
+await sql.query(`alter table admins alter column alerts set default '{}'`)
+await sql.query(`alter table admins alter column alerts set not null`)
 console.log('Tables ready.')
 
 const [{ n: eventCount }] = await sql.query('select count(*)::int as n from events')

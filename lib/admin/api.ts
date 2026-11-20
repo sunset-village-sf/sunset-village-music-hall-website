@@ -1,6 +1,9 @@
 // Calls to /api/admin. Errors carry the server's plain-language message so
 // screens can show it as is.
 
+import type { RequestKind, RequestStatus } from '@/lib/requests'
+import type { AlertKind, Role } from '@/lib/team'
+
 export class SignedOut extends Error {}
 
 async function call<T>(action: string, body?: unknown): Promise<T> {
@@ -29,13 +32,16 @@ export interface Booking {
   date: string | null
   headcount: string | null
   message: string
-  status: 'new' | 'replied' | 'booked' | 'declined'
+  kind: RequestKind
+  status: RequestStatus
   notes: string | null
   org?: string | null
   phone?: string | null
   backup_date?: string | null
   /** Comma-separated, e.g. "Sound tech, Bar". */
   needs?: string | null
+  /** Leasing: the kind of space, e.g. "Retail". */
+  space?: string | null
 }
 
 export interface Subscriber {
@@ -64,8 +70,9 @@ export interface Setup {
 }
 
 export interface Me extends Setup {
-  admin: { id: number; email: string; name: string }
+  admin: { id: number; email: string; name: string; role: Role }
   newBookings: number
+  newLeasing: number
   usingSetupPassword: boolean
 }
 
@@ -73,6 +80,8 @@ export interface AdminUser {
   id: number
   email: string
   name: string
+  role: Role
+  alerts: AlertKind[]
   created_at: string
   last_login_at: string | null
   created_by_name: string | null

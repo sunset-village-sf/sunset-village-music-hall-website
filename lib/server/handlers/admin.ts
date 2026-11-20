@@ -6,6 +6,9 @@
 // BLOB_STORE_ID or BLOB_READ_WRITE_TOKEN (image uploads), RESEND_API_KEY + INQUIRY_FROM
 // (emails), STRIPE_SECRET_KEY (online tickets).
 
+import { isStatusFor, type RequestKind } from '@/lib/requests'
+import { isAlertKind, type Role } from '@/lib/team'
+import { hasAlertRecipient } from '../alerts'
 import { put } from '@vercel/blob'
 import { query, hasDb, eventFromRow, tenantFromRow, getSettings } from '../db'
 import {
@@ -40,6 +43,11 @@ import { MAX_ARTISTS, facebookUrl, instagramHandle, type Artist } from '@/lib/ar
 type Body = Record<string, any>
 
 class BadRequest extends Error {}
+class Forbidden extends Error {}
+/** Team management is for admins only; members can use the rest of the admin. */
+const requireAdmin = (me: Admin) => {
+  if (me.role !== 'admin') throw new Forbidden('Only admins can change the team. Ask Tom or Jason.')
+}
 const need = (v: string | null, what: string): string => {
   if (!v) throw new BadRequest(`${what} is required`)
   return v
@@ -95,7 +103,7 @@ async function login(req: VercelReq, res: VercelRes, b: Body) {
     const [{ count }] = await query<{ count: number }>(`select count(*)::int as count from admins`)
     if (count === 0) {
       const [created] = await query<{ id: number }>(
-        `insert into admins (email, name, password_hash) values ($1, $2, $3) returning id`,
+        `insert into admins (email, name, password_hash, role) values ($1, $2, $3, 'admin') returning id`,
         [email, email.split('@')[0], hashPassword(password)],
       )
       id = created.id
@@ -112,32 +120,35 @@ async function login(req: VercelReq, res: VercelRes, b: Body) {
   return res.status(200).json({ ok: true })
 }
 
-// ── Team (admins) ──────────────────────────────────────────────────────
-// Every admin can see and do everything, including adding and removing
-// other admins. Nobody can remove themselves, and the last admin stays.
+// ── Team ───────────────────────────────────────────────────────────────
+// Admins add and remove people, change roles and set anyone's alerts.
+// Members see the team list and set their own alerts. Nobody can remove
+// themselves or change their own role, and there's always at least one admin.
 
 const PASSWORD_MIN = 10
 
 async function addAdmin(me: Admin, b: Body) {
+  requireAdmin(me)
+  const role: Role = b.role === 'admin' ? 'admin' : 'member'
   const email = str(b.email).trim().toLowerCase()
   if (!isEmail(email)) throw new BadRequest('Enter their email address')
   const name = need(opt(b.name, 100), 'Name')
   const password = tempPassword()
   const rows = await query<{ id: number }>(
-    `insert into admins (email, name, password_hash, created_by) values ($1, $2, $3, $4)
+    `insert into admins (email, name, password_hash, created_by, role) values ($1, $2, $3, $4, $5)
      on conflict (email) do nothing returning id`,
-    [email, name, hashPassword(password), me.id],
+    [email, name, hashPassword(password), me.id, role],
   )
-  if (!rows.length) throw new BadRequest('That email already has an admin login')
+  if (!rows.length) throw new BadRequest('That email already has a login')
   // The password itself is shown once to the person adding them, never emailed.
   const emailed = await sendEmail({
     to: [email],
     reply_to: me.email,
-    subject: 'You’re now an admin for the Sunset Village website',
+    subject: 'You’re on the Sunset Village website team',
     text: [
       `Hi ${name.split(' ')[0]},`,
       '',
-      `${me.name} added you as an admin of sunsetvillagesf.com. You can edit events and shops, see hall booking requests and ticket sales, and send newsletter announcements.`,
+      `${me.name} added you to the team that runs sunsetvillagesf.com. You can edit events and shops, see hall booking requests, leasing inquiries and ticket sales, and send newsletter announcements.${role === 'admin' ? ' As an admin you can also add and remove people on the team.' : ''}`,
       '',
       `Sign in at ${SITE_URL}/admin with this email address (${email}).`,
       `${me.name} will give you a temporary password. Change it under Team → Your password once you’re in.`,
@@ -221,8 +232,8 @@ async function overview() {
   const [[counts], bookings, orders, upcoming] = await Promise.all([
     query<Record<string, number>>(
       `select
-         (select count(*)::int from bookings where status = 'new' and archived_at is null) as new_bookings,
-         (select count(*)::int from bookings where status = 'replied' and archived_at is null) as waiting_bookings,
+         (select count(*)::int from bookings where kind = 'hall' and status = 'new' and archived_at is null) as new_bookings,
+         (select count(*)::int from bookings where kind = 'leasing' and status = 'new' and archived_at is null) as new_leasing,
          (select count(*)::int from subscribers where unsubscribed_at is null) as subscribers,
          (select coalesce(sum(quantity), 0)::int from orders where refunded_at is null and created_at > now() - interval '30 days') as tickets_30d,
          (select coalesce(sum(amount_cents), 0)::int from orders where refunded_at is null and created_at > now() - interval '30 days') as revenue_30d`,
@@ -530,18 +541,20 @@ export default async function handler(req: VercelReq, res: VercelRes) {
     }
 
     if (action === 'me') {
-      const [{ n }] = await query<{ n: number }>(
-        `select count(*)::int as n from bookings where status = 'new' and archived_at is null`,
+      const [{ hall, leasing }] = await query<{ hall: number; leasing: number }>(
+        `select count(*) filter (where kind = 'hall')::int as hall, count(*) filter (where kind = 'leasing')::int as leasing
+         from bookings where status = 'new' and archived_at is null`,
       )
       return ok({
         admin: me,
         email: hasEmail(),
-        notifications: hasEmail() && inquiryTo().length > 0,
+        notifications: hasEmail() && (await hasAlertRecipient()),
         uploads: hasBlob(),
         calendar: hasCalendar(),
         payments: hasStripe(),
-        backups: Boolean(process.env.CRON_SECRET) && hasEmail() && inquiryTo().length > 0,
-        newBookings: n,
+        backups: Boolean(process.env.CRON_SECRET) && hasEmail() && (await hasAlertRecipient('backup')),
+        newBookings: hall,
+        newLeasing: leasing,
         // Still signing in with the shared setup password: nudge them to pick their own.
         usingSetupPassword: checkPassword(
           process.env.ADMIN_PASSWORD!,
@@ -558,7 +571,9 @@ export default async function handler(req: VercelReq, res: VercelRes) {
         case 'tenants':
           return ok((await query(`select * from tenants order by sort, name`)).map(tenantFromRow))
         case 'bookings':
-          return ok(await query(`select * from bookings where archived_at is null order by created_at desc`))
+          return ok(await query(`select * from bookings where kind = 'hall' and archived_at is null order by created_at desc`))
+        case 'leasing':
+          return ok(await query(`select * from bookings where kind = 'leasing' and archived_at is null order by created_at desc`))
         case 'subscribers':
           return ok(await query(`select id, email, created_at, unsubscribed_at from subscribers order by created_at desc`))
         case 'announcements':
@@ -577,7 +592,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
         case 'admins':
           return ok(
             await query(
-              `select a.id, a.email, a.name, a.created_at, a.last_login_at, c.name as created_by_name
+              `select a.id, a.email, a.name, a.role, a.alerts, a.created_at, a.last_login_at, c.name as created_by_name
                from admins a left join admins c on c.id = a.created_by order by a.created_at`,
             ),
           )
@@ -604,7 +619,10 @@ export default async function handler(req: VercelReq, res: VercelRes) {
           return ok({ ok: true })
         }
         case 'booking-update': {
-          const status = ['new', 'replied', 'booked', 'declined'].includes(b.status) ? b.status : 'new'
+          const [row] = await query<{ kind: RequestKind }>(`select kind from bookings where id = $1`, [Number(b.id)])
+          if (!row) throw new BadRequest('That request no longer exists')
+          if (!isStatusFor(row.kind, b.status)) throw new BadRequest('Unknown status')
+          const status = b.status
           await query(`update bookings set status = $2, notes = $3 where id = $1`, [
             Number(b.id),
             status,
@@ -655,21 +673,38 @@ export default async function handler(req: VercelReq, res: VercelRes) {
         case 'admin-add':
           return ok(await addAdmin(me, b))
         case 'admin-remove': {
+          requireAdmin(me)
           const id = Number(b.id)
           if (id === me.id) throw new BadRequest('You can’t remove yourself. Ask another admin to.')
-          const [{ n: count }] = await query<{ n: number }>(`select count(*)::int as n from admins`)
-          if (count <= 1) throw new BadRequest('There has to be at least one admin')
           await query(`delete from admins where id = $1`, [id])
           return ok({ ok: true })
         }
+        case 'admin-role': {
+          requireAdmin(me)
+          const id = Number(b.id)
+          if (id === me.id) throw new BadRequest('You can’t change your own role. Ask another admin to.')
+          if (b.role !== 'admin' && b.role !== 'member') throw new BadRequest('Unknown role')
+          const rows = await query(`update admins set role = $2 where id = $1 returning id`, [id, b.role])
+          if (!rows.length) throw new BadRequest('That person is no longer on the team')
+          return ok({ ok: true })
+        }
+        case 'admin-alerts': {
+          const id = Number(b.id)
+          if (id !== me.id) requireAdmin(me)
+          const alerts = [...new Set((Array.isArray(b.alerts) ? b.alerts : []).filter(isAlertKind))]
+          const rows = await query(`update admins set alerts = $2 where id = $1 returning id`, [id, alerts])
+          if (!rows.length) throw new BadRequest('That person is no longer on the team')
+          return ok({ ok: true })
+        }
         case 'admin-reset': {
+          requireAdmin(me)
           // A new temporary password for someone who forgot theirs.
           const password = tempPassword()
           const rows = await query(`update admins set password_hash = $2 where id = $1 returning id`, [
             Number(b.id),
             hashPassword(password),
           ])
-          if (!rows.length) throw new BadRequest('That admin no longer exists')
+          if (!rows.length) throw new BadRequest('That person is no longer on the team')
           return ok({ password })
         }
         case 'password':
@@ -681,6 +716,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
     return res.status(404).json({ error: 'Unknown action' })
   } catch (e) {
     if (e instanceof BadRequest) return res.status(400).json({ error: e.message })
+    if (e instanceof Forbidden) return res.status(403).json({ error: e.message })
     console.error(`admin ${action} failed`, e)
     return res.status(500).json({ error: 'Something went wrong. Try again.' })
   }
