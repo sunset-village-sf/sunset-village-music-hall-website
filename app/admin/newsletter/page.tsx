@@ -4,7 +4,7 @@
 // one-off announcement to everyone signed up, see what went out, and manage
 // the subscriber list.
 
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { getJson, postJson, type Announcement, type Setup, type Subscriber } from '@/lib/admin/api'
 import { fmtWhen, useLoad } from '@/lib/admin/use-load'
 import { useAdmin } from '@/components/internal/admin-shell'
@@ -15,9 +15,10 @@ import { StatusPill } from '@/components/internal/status-pill'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { VoiceComposer } from '@/components/internal/admin/voice-composer'
+import { EmailPreview } from '@/components/internal/admin/email-preview'
+import { NoteEditor, noteHint } from '@/components/internal/admin/note-editor'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 const DRAFT_KEY = 'sv-admin-announcement-draft'
@@ -47,6 +48,22 @@ function Composer({ setup, active, onSent }: { setup: Setup; active: number; onS
   const [done, setDone] = useState('')
   const [tested, setTested] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const [html, setHtml] = useState<string>()
+
+  // Rebuild the preview shortly after the subject or message changes.
+  useEffect(() => {
+    if (!setup.email) return
+    let live = true
+    const t = setTimeout(() => {
+      postJson<{ html: string }>('announce-preview', draft)
+        .then((p) => live && setHtml(p.html))
+        .catch((e) => live && setError((e as Error).message))
+    }, 350)
+    return () => {
+      live = false
+      clearTimeout(t)
+    }
+  }, [draft, setup.email])
 
   const setDraft = (d: typeof draft) => {
     setDraftState(d)
@@ -89,74 +106,77 @@ function Composer({ setup, active, onSent }: { setup: Setup; active: number; onS
 
   return (
     <Panel title="Send an announcement">
-      <form
-        onSubmit={(e: FormEvent) => {
-          e.preventDefault()
-          setError('')
-          setDone('')
-          setConfirming(true)
-        }}
-        className="flex flex-col gap-4"
-      >
-        <FormField label="Subject" htmlFor="ann-subject">
-          <Input
-            density="compact"
-            id="ann-subject"
-            required
-            value={draft.subject}
-            onChange={(e) => setDraft({ ...draft, subject: e.target.value })}
-            placeholder="e.g. This Friday at the Music Hall"
-          />
-        </FormField>
-        <FormField
-          label="Message"
-          htmlFor="ann-body"
-          hint="Plain text. Leave a blank line between paragraphs. Links are clickable automatically. It goes out in the Village Voice frame, with the subject as the headline and an unsubscribe link at the bottom."
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+        <form
+          onSubmit={(e: FormEvent) => {
+            e.preventDefault()
+            setError('')
+            setDone('')
+            setConfirming(true)
+          }}
+          className="flex flex-col gap-4"
         >
-          <Textarea
-            density="compact"
-            id="ann-body"
-            required
-            rows={10}
-            value={draft.body}
-            onChange={(e) => setDraft({ ...draft, body: e.target.value })}
-          />
-        </FormField>
-        <div className="flex flex-wrap items-end gap-2 border-t border-border pt-4">
-          <FormField label="Send a test to yourself first" htmlFor="ann-test" className="min-w-56 flex-1">
+          <FormField label="Subject" htmlFor="ann-subject">
             <Input
               density="compact"
-              id="ann-test"
-              type="email"
-              value={testTo}
-              onChange={(e) => setTestTo(e.target.value)}
-              placeholder="your@email.com"
+              id="ann-subject"
+              required
+              value={draft.subject}
+              onChange={(e) => setDraft({ ...draft, subject: e.target.value })}
+              placeholder="e.g. This Friday at the Music Hall"
             />
           </FormField>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="mb-0.5"
-            disabled={!!busy || !draft.subject || !draft.body}
-            onClick={() => send(true)}
+          <FormField
+            label="Message"
+            htmlFor="ann-body"
+            hint={`It goes out in the Village Voice frame, with the subject as the headline. ${noteHint}`}
           >
-            {busy === 'test' ? 'Sending test…' : 'Send test'}
-          </Button>
-        </div>
-        <ErrorNote>{error}</ErrorNote>
-        {done && (
-          <Alert variant="info" className="font-normal">
-            {done}
-          </Alert>
-        )}
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" variant="sun" size="sm" disabled={!!busy || active === 0}>
-            {busy === 'send' ? 'Sending…' : `Send to ${active} ${active === 1 ? 'subscriber' : 'subscribers'}`}
-          </Button>
-          {!tested && draft.body && <span className="text-meta text-ink-2">Tip: send yourself a test first.</span>}
-        </div>
-      </form>
+            <NoteEditor
+              id="ann-body"
+              required
+              rows={12}
+              uploads={setup.uploads}
+              value={draft.body}
+              onChange={(body) => setDraft({ ...draft, body })}
+            />
+          </FormField>
+          <div className="flex flex-wrap items-end gap-2 border-t border-border pt-4">
+            <FormField label="Send a test to yourself first" htmlFor="ann-test" className="min-w-48 flex-1">
+              <Input
+                density="compact"
+                id="ann-test"
+                type="email"
+                value={testTo}
+                onChange={(e) => setTestTo(e.target.value)}
+                placeholder="your@email.com"
+              />
+            </FormField>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mb-0.5"
+              disabled={!!busy || !draft.subject || !draft.body}
+              onClick={() => send(true)}
+            >
+              {busy === 'test' ? 'Sending test…' : 'Send test'}
+            </Button>
+          </div>
+          <ErrorNote>{error}</ErrorNote>
+          {done && (
+            <Alert variant="info" className="font-normal">
+              {done}
+            </Alert>
+          )}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="submit" variant="sun" size="sm" disabled={!!busy || active === 0}>
+              {busy === 'send' ? 'Sending…' : `Send to ${active} ${active === 1 ? 'subscriber' : 'subscribers'}`}
+            </Button>
+            {!tested && draft.body && <span className="text-meta text-ink-2">Tip: send yourself a test first.</span>}
+          </div>
+        </form>
+        <EmailPreview html={html} subject={draft.subject} title="Announcement preview" />
+      </div>
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}

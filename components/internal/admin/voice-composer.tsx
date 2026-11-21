@@ -1,17 +1,20 @@
 'use client'
 
-// The weekly Village Voice: pick the week, add an optional note, look at the
+// The weekly Village Voice: pick the week, add an optional note (text and
+// images, in a card above the shows), look at the
 // real email (built on the server from the calendar), send a test, send it.
 
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { postJson } from '@/lib/admin/api'
 import { todayISO } from '@/lib/events'
-import { ErrorNote, FormField, Mono, Panel } from '@/components/internal/internal-ui'
+import { ErrorNote, FormField, Panel } from '@/components/internal/internal-ui'
 import { ConfirmDialog } from '@/components/internal/admin/confirm-dialog'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { EmailPreview } from '@/components/internal/admin/email-preview'
+import { NoteEditor, noteHint } from '@/components/internal/admin/note-editor'
+import { useAdmin } from '@/components/internal/admin-shell'
 
 interface Preview {
   start: string
@@ -42,6 +45,7 @@ const people = (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`
 const shows = (n: number) => (n === 0 ? 'No shows' : `${n} ${n === 1 ? 'show' : 'shows'}`)
 
 export function VoiceComposer({ active, onSent }: { active: number; onSent: () => void }) {
+  const { me } = useAdmin()
   const [start, setStart] = useState(nextMonday)
   const [note, setNoteState] = useState(remembered)
   const [subject, setSubject] = useState('')
@@ -51,7 +55,6 @@ export function VoiceComposer({ active, onSent }: { active: number; onSent: () =
   const [error, setError] = useState('')
   const [done, setDone] = useState('')
   const [confirming, setConfirming] = useState(false)
-  const frame = useRef<HTMLIFrameElement>(null)
 
   const setNote = (v: string) => {
     setNoteState(v)
@@ -75,11 +78,6 @@ export function VoiceComposer({ active, onSent }: { active: number; onSent: () =
       clearTimeout(t)
     }
   }, [start, note])
-
-  const fit = () => {
-    const doc = frame.current?.contentDocument
-    if (doc && frame.current) frame.current.style.height = `${doc.documentElement.scrollHeight}px`
-  }
 
   async function send(test: boolean) {
     setError('')
@@ -144,17 +142,11 @@ export function VoiceComposer({ active, onSent }: { active: number; onSent: () =
             />
           </FormField>
           <FormField
-            label="Note at the top (optional)"
+            label="Note from the team (optional)"
             htmlFor="voice-note"
-            hint="A welcome, a heads-up, a shout-out. Leave a blank line between paragraphs. Blank uses the standard line."
+            hint={`News, a thank-you, a heads-up, a photo or two. It goes in a card above the week’s shows; leave it empty most weeks. ${noteHint}`}
           >
-            <Textarea
-              density="compact"
-              id="voice-note"
-              rows={5}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
+            <NoteEditor id="voice-note" value={note} onChange={setNote} uploads={me.uploads} rows={7} />
           </FormField>
           <div className="flex flex-wrap items-end gap-2 border-t border-border pt-4">
             <FormField label="Send a test to yourself first" htmlFor="voice-test" className="min-w-48 flex-1">
@@ -191,24 +183,7 @@ export function VoiceComposer({ active, onSent }: { active: number; onSent: () =
           </div>
         </form>
 
-        <div className="min-w-0">
-          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-            <span className="label-sm text-ink-2">Preview</span>
-            {finalSubject && <Mono className="truncate text-ink-2">{finalSubject}</Mono>}
-          </div>
-          {preview ? (
-            <iframe
-              ref={frame}
-              title="Village Voice preview"
-              srcDoc={preview.html.replace('<head>', '<head><base target="_blank">')}
-              onLoad={fit}
-              sandbox="allow-same-origin allow-popups"
-              className="block h-[60rem] w-full rounded-lg border border-border bg-fog"
-            />
-          ) : (
-            <div className="h-96 rounded-lg border border-border bg-fog" aria-busy="true" />
-          )}
-        </div>
+        <EmailPreview html={preview?.html} subject={finalSubject} title="Village Voice preview" />
       </div>
       <ConfirmDialog
         open={confirming}
