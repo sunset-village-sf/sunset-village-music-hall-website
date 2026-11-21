@@ -42,6 +42,7 @@ import {
   issueText,
   type Issue,
 } from '../newsletter-email'
+import { noteText } from '@/lib/note-markup'
 import { loadContent } from '../content'
 import { todayISO, upcoming } from '@/lib/events'
 import { str, opt, clientIp, isEmail, type VercelReq, type VercelRes } from '../http'
@@ -537,7 +538,8 @@ async function upload(b: Body) {
   const data = Buffer.from(str(b.data), 'base64')
   if (data.length === 0 || data.length > 3_500_000) throw new BadRequest('Image is too large')
   const ext = type.split('/')[1].replace('jpeg', 'jpg')
-  const blob = await put(`flyers/${slugify(str(b.name)) || 'flyer'}.${ext}`, data, {
+  const folder = b.folder === 'newsletter' ? 'newsletter' : 'flyers'
+  const blob = await put(`${folder}/${slugify(str(b.name)) || 'image'}.${ext}`, data, {
     access: 'public',
     contentType: type,
     addRandomSuffix: true,
@@ -598,6 +600,12 @@ function assetBase(req: VercelReq) {
   return !host || /^(localhost|127\.)/.test(host) ? SITE_URL : `https://${host}`
 }
 
+function announcementPreview(b: Body) {
+  const subject = opt(b.subject, 200) ?? 'Your subject here'
+  const body = opt(b.body, 20000) ?? ''
+  return { html: announcementHtml(subject, body, { assets: '', unsubscribeUrl: '#' }) }
+}
+
 async function sendAnnouncement(b: Body, req: VercelReq) {
   const subject = need(opt(b.subject, 200), 'Subject')
   const body = need(opt(b.body, 20000), 'Message')
@@ -609,7 +617,7 @@ async function sendAnnouncement(b: Body, req: VercelReq) {
       text: announcementText(body, unsub),
       html: announcementHtml(subject, body, { assets, unsubscribeUrl: unsub }),
     }),
-    body,
+    noteText(body),
   )
 }
 
@@ -631,7 +639,7 @@ async function buildIssue(b: Body): Promise<Issue> {
   return {
     start,
     end,
-    note: opt(b.note, 3000) ?? undefined,
+    note: opt(b.note, 20000) ?? undefined,
     events: events.filter((e) => e.date >= start && e.date <= end),
     later: events.filter((e) => e.date > end).slice(0, 5),
   }
@@ -800,6 +808,8 @@ export default async function handler(req: VercelReq, res: VercelRes) {
           return ok(await upload(b))
         case 'announce':
           return ok(await sendAnnouncement(b, req))
+        case 'announce-preview':
+          return ok(announcementPreview(b))
         case 'voice-preview':
           return ok(await voicePreview(b))
         case 'voice-send':

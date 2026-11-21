@@ -11,6 +11,7 @@ import tokens from '@/lib/tokens.json'
 import { site, fullAddress } from '@/lib/data/site'
 import type { EventCategory, VillageEvent } from '@/lib/data/events'
 import { categoryOf, dateParts, eventHref, primaryAction, priceLine } from '@/lib/events'
+import { noteText, parseNote, type Inline } from '@/lib/note-markup'
 
 export const SITE_URL = 'https://sunsetvillagesf.com'
 
@@ -27,20 +28,54 @@ export const esc = (s: string) =>
 
 const abs = (href: string) => (/^https?:\/\//.test(href) ? href : `${SITE_URL}${href}`)
 
-/** Plain text → paragraphs with line breaks and clickable links. */
-function paragraphs(text: string, color: string, linkColor: string, size = 17) {
-  return text
-    .trim()
-    .split(/\n\s*\n/)
-    .filter(Boolean)
-    .map(
-      (p) =>
-        `<p style="margin:0 0 14px;font-family:${display};font-size:${size}px;line-height:1.5;color:${color}">${esc(p)
-          .replace(/(https?:\/\/[^\s<]+)/g, `<a href="$1" style="color:${linkColor};text-decoration:underline">$1</a>`)
-          .replace(/\n/g, '<br>')}</p>`,
+/** Width of the inside of a paper card (600 - body and card padding - borders), for images. */
+const CARD_INNER = 496
+
+function inlineHtml(runs: Inline[], linkColor: string): string {
+  return runs
+    .map((r) =>
+      r.t === 'text'
+        ? esc(r.text)
+        : r.t === 'bold'
+          ? `<strong style="font-weight:800">${inlineHtml(r.children, linkColor)}</strong>`
+          : r.t === 'italic'
+            ? `<em>${inlineHtml(r.children, linkColor)}</em>`
+            : `<a href="${esc(r.href)}" style="color:${linkColor};text-decoration:underline">${inlineHtml(r.children, linkColor)}</a>`,
     )
     .join('')
 }
+
+/** The editor's markup (see lib/note-markup.ts) as email-safe HTML. */
+function noteHtml(src: string, color: string, linkColor: string, size = 17) {
+  const text = `font-family:${display};font-size:${size}px;line-height:1.5;color:${color}`
+  return parseNote(src)
+    .map((b) => {
+      if (b.t === 'p')
+        return `<p style="margin:0 0 14px;${text}">${b.lines.map((l) => inlineHtml(l, linkColor)).join('<br>')}</p>`
+      if (b.t === 'img') {
+        const caption = b.caption
+          ? `<div style="font-family:${mono};font-size:13px;line-height:1.5;color:${c('ink-2')};margin-top:8px">${esc(b.caption)}</div>`
+          : ''
+        return `<div style="margin:4px 0 18px"><img src="${esc(b.src)}" width="${CARD_INNER}" alt="${esc(b.caption)}" style="display:block;width:100%;max-width:${CARD_INNER}px;height:auto;border:2px solid ${c('ink')};border-radius:16px">${caption}</div>`
+      }
+      const items = b.items.map((i) => `<li style="margin:0 0 6px;${text}">${inlineHtml(i, linkColor)}</li>`).join('')
+      return `<${b.t} style="margin:0 0 14px;padding-left:24px;${text}">${items}</${b.t}>`
+    })
+    .join('')
+}
+
+/** A paper card holding a written note (the Voice's note, an announcement's message). */
+const noteCard = (src: string) =>
+  `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${c('paper')};border:2px solid ${c('ink')};border-radius:24px;margin:0 0 24px">
+<tr><td style="padding:26px 26px 12px">${noteHtml(src, c('ink'), c('sea'))}</td></tr></table>`
+
+/** First words of a note, for the inbox preview line. */
+const firstWords = (src: string) =>
+  noteText(src)
+    .replace(/\[Photo[^\]]*\]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 140)
 
 // ── Building blocks ────────────────────────────────────────────────────
 
@@ -99,7 +134,7 @@ ${e.kind ? `<div style="font-family:${mono};font-size:12px;letter-spacing:0.12em
 <a href="${esc(href)}" style="font-family:${display};font-size:22px;font-weight:800;letter-spacing:-0.01em;line-height:1.15;color:${c('ink')};text-decoration:none">${esc(e.title)}</a>
 ${e.subtitle ? `<div style="font-family:${display};font-size:15px;line-height:1.45;color:${c('ink-2')};margin-top:4px">${esc(e.subtitle)}</div>` : ''}
 ${meta ? `<div style="font-family:${mono};font-size:13px;line-height:1.6;color:${c('ink')};margin-top:8px">${esc(meta)}</div>` : ''}
-<div style="margin-top:14px">${button(action && !action.external ? abs(action.href) : action?.href ?? href, action?.label ?? 'Details')}</div>
+<div style="margin-top:14px">${button(action && !action.external ? abs(action.href) : (action?.href ?? href), action?.label ?? 'Details')}</div>
 </td>
 ${flyer}
 </tr></table>
@@ -179,7 +214,7 @@ export interface Issue {
   /** First and last day covered, yyyy-mm-dd. */
   start: string
   end: string
-  /** Optional note from the team at the top. Plain text. */
+  /** Optional note from the team, shown in a card above the shows. Editor markup (lib/note-markup.ts). */
   note?: string
   /** Shows in the week, in date order. */
   events: VillageEvent[]
@@ -204,13 +239,16 @@ const defaultNote = (n: number) =>
     : `Here’s what’s on at the Music Hall this week, out at ${site.corner}.`
 
 export function issueHtml(i: Issue, f: Omit<Frame, 'preheader'>) {
-  const note = i.note?.trim() || defaultNote(i.events.length)
-  const fr = { ...f, preheader: i.events.map((e) => e.title).join(' · ') || note }
+  const note = i.note?.trim() ?? ''
+  const fr = {
+    ...f,
+    preheader: (note && firstWords(note)) || i.events.map((e) => e.title).join(' · ') || defaultNote(0),
+  }
   const quiet = i.events.length === 0
   const masthead = `<div style="margin-top:30px">${eyebrow(fr, `${site.newsletter} · ${weekLabel(i.start, i.end)}`, c('yellow'), 'yellow')}</div>
 <h1 class="sv-h1" style="margin:14px 0 0;font-family:${display};font-size:56px;font-weight:800;line-height:0.95;letter-spacing:-0.04em;color:${c('fog')}">
 ${quiet ? 'A quiet week in the' : 'This week in the'} <span style="color:${c('sun')}">fog.</span></h1>
-<div style="margin-top:18px">${paragraphs(note, c('mist'), c('yellow'), 18)}</div>`
+<div style="margin-top:18px">${noteHtml(defaultNote(i.events.length), c('mist'), c('yellow'), 18)}</div>`
 
   const week = quiet
     ? ''
@@ -236,7 +274,7 @@ ${button(`${SITE_URL}/events`, 'See the full calendar')}
 ${button(`${SITE_URL}/book`, 'Book the hall', 'outline')}
 </td></tr></table>`
 
-  return frame(fr, masthead, week + later + book)
+  return frame(fr, masthead, (note ? noteCard(note) : '') + week + later + book)
 }
 
 export function issueText(i: Issue, unsubscribeUrl: string) {
@@ -252,7 +290,8 @@ export function issueText(i: Issue, unsubscribeUrl: string) {
   }
   return [
     `${site.newsletter.toUpperCase()} · ${weekLabel(i.start, i.end)}`,
-    i.note?.trim() || defaultNote(i.events.length),
+    defaultNote(i.events.length),
+    ...(i.note?.trim() ? [noteText(i.note)] : []),
     ...(i.events.length ? ['THIS WEEK', ...i.events.map(line)] : []),
     ...(i.later.length ? ['FURTHER OUT', ...i.later.map(line)] : []),
     `Full calendar: ${SITE_URL}/events\nBook the hall: ${SITE_URL}/book`,
@@ -263,13 +302,11 @@ export function issueText(i: Issue, unsubscribeUrl: string) {
 // ── One-off announcements, in the same frame ──────────────────────────
 
 export function announcementHtml(subject: string, body: string, f: Omit<Frame, 'preheader'>) {
-  const fr = { ...f, preheader: body.trim().split('\n')[0].slice(0, 140) }
+  const fr = { ...f, preheader: firstWords(body) }
   const masthead = `<div style="margin-top:30px">${eyebrow(fr, site.newsletter, c('yellow'), 'yellow')}</div>
 <h1 class="sv-h1" style="margin:14px 0 0;font-family:${display};font-size:44px;font-weight:800;line-height:1;letter-spacing:-0.03em;color:${c('fog')}">${esc(subject)}</h1>`
-  const content = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${c('paper')};border:2px solid ${c('ink')};border-radius:24px;margin:0 0 24px">
-<tr><td style="padding:26px 26px 12px">${paragraphs(body, c('ink'), c('sea'))}</td></tr></table>`
-  return frame(fr, masthead, content)
+  return frame(fr, masthead, noteCard(body))
 }
 
 export const announcementText = (body: string, unsubscribeUrl: string) =>
-  `${body.trim()}\n\n--\n${site.name} · ${fullAddress}\nUnsubscribe: ${unsubscribeUrl}`
+  `${noteText(body)}\n\n--\n${site.name} · ${fullAddress}\nUnsubscribe: ${unsubscribeUrl}`
