@@ -19,6 +19,7 @@ export function ImagePicker({
   enabled,
   name,
   hint,
+  poster,
 }: {
   label: string
   /** "flyer", "photo" — used in the button labels. */
@@ -29,6 +30,8 @@ export function ImagePicker({
   /** Used for the stored file name. */
   name: string
   hint?: string
+  /** Preview in the 4:5 poster frame the site shows flyers in. */
+  poster?: boolean
 }) {
   const id = useId()
   const [busy, setBusy] = useState(false)
@@ -54,7 +57,14 @@ export function ImagePicker({
       <Label htmlFor={enabled ? id : undefined}>{label}</Label>
       {value && (
         // eslint-disable-next-line @next/next/no-img-element -- uploaded blob URL, any host
-        <img src={value} alt="" className="max-h-64 w-fit max-w-full rounded-md border border-border" />
+        <img
+          src={value}
+          alt=""
+          className={cn(
+            'rounded-md border border-border',
+            poster ? 'aspect-[4/5] w-48 bg-muted object-contain' : 'max-h-64 w-fit max-w-full',
+          )}
+        />
       )}
       {enabled ? (
         <div className="flex flex-wrap items-center gap-2">

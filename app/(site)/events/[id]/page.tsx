@@ -69,14 +69,16 @@ export default async function EventPage({ params }: Props) {
         lede={lede}
       />
 
-      <Section className="flex flex-wrap items-start gap-8 pt-12 pb-22">
+      {/* Flyer on the left (it stays in view on wide screens while you read),
+          tickets then details on the right. On phones: flyer, tickets, details. */}
+      <Section className="flex flex-wrap items-start gap-x-10 gap-y-8 pt-12 pb-22">
         {/* On its own row, so the flyer and the tickets card line up at the top. */}
         <Link href="/events" className="-mb-2 basis-full font-bold">
           ← All events
         </Link>
-        <div className="flex min-w-0 flex-[1.4_1_480px] flex-col gap-6">
+        <div className="flex w-full max-w-110 min-w-0 flex-[0_1_440px] flex-col gap-4 md:sticky md:top-6">
           <PosterArt
-            sizes="(max-width: 640px) 100vw, 800px"
+            sizes="(max-width: 640px) 100vw, 440px"
             category={categoryOf(event)}
             dow={dow}
             day={day}
@@ -85,12 +87,11 @@ export default async function EventPage({ params }: Props) {
             title={event.title}
             className="rounded-2xl border-2 border-ink"
           />
-          {event.sample && <Badge tone="yellow">Example listing</Badge>}
-          {body && body !== lede && <p className="max-w-160 text-lede whitespace-pre-line">{body}</p>}
-          <Lineup artists={event.artists} />
+          {event.sample && <Badge tone="yellow" className="self-start">Example listing</Badge>}
         </div>
 
-        <aside className="flex min-w-0 flex-[1_1_340px] flex-col gap-6 rounded-2xl border-2 border-ink bg-card p-7">
+        <div className="flex min-w-0 flex-[1_1_420px] flex-col gap-8">
+        <aside className="flex flex-col gap-6 rounded-2xl border-2 border-ink bg-card p-7">
           <h2 className="text-heading-panel">{isPast ? 'This one’s over' : 'Tickets'}</h2>
           <Facts
             className="grid-cols-1 sm:grid-cols-2"
@@ -125,6 +126,9 @@ export default async function EventPage({ params }: Props) {
             icsHref={isPast ? undefined : `/events/${encodeURIComponent(event.id)}/calendar.ics`}
           />
         </aside>
+        {body && body !== lede && <p className="max-w-160 text-lede whitespace-pre-line">{body}</p>}
+        <Lineup artists={event.artists} />
+        </div>
       </Section>
     </>
   )

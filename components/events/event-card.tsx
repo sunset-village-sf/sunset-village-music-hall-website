@@ -4,7 +4,7 @@ import { cardLink, categoryOf, dateParts, eventHref, priceLine } from '@/lib/eve
 import { PosterArt } from './poster-art'
 import { EventActions } from './event-actions'
 
-/** Events page card: poster on the category fill, then kind/title/subtitle/meta and actions. The whole card opens the event. */
+/** Events page card: the whole 4:5 flyer (or category poster), then date/kind/title/subtitle/meta and actions. The whole card opens the event. */
 export function EventCard({ event }: { event: VillageEvent }) {
   const { dow, day, month } = dateParts(event.date)
   const meta = [event.time, priceLine(event)].filter(Boolean).join(' · ')
@@ -20,7 +20,10 @@ export function EventCard({ event }: { event: VillageEvent }) {
         className="border-b-2 border-dashed border-ink"
       />
       <div className="flex flex-1 flex-col gap-2 px-5 pt-4.5 pb-5">
-        {event.kind && <span className="kind">{event.kind}</span>}
+        <span className="label-sm">
+          {dow} {month} {day}
+          {event.kind && <span className="kind ml-2">· {event.kind}</span>}
+        </span>
         <h3 className="text-heading-card">
           <Link href={eventHref(event)} className={cardLink}>
             {event.title}
