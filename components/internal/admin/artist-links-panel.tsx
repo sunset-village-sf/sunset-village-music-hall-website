@@ -26,7 +26,10 @@ function status(l: ArtistLink | undefined) {
     return l.expired
       ? `Link sent to ${l.email} on ${when(l.created_at)} expired without a reply.`
       : `Link sent to ${l.email} on ${when(l.created_at)}. Waiting for them (works until ${when(l.expires_at)}).`
-  if (l.status === 'approved') return `Their details were approved on ${when(l.reviewed_at!)}.`
+  if (l.status === 'approved')
+    return l.expired
+      ? `Their details were approved on ${when(l.reviewed_at!)}.`
+      : `Their details were approved on ${when(l.reviewed_at!)}. Their link stays open for files until ${when(l.expires_at)}.`
   if (l.status === 'discarded') return `What they sent was discarded on ${when(l.reviewed_at!)}.`
   return `The link sent on ${when(l.created_at)} was cancelled.`
 }
@@ -170,7 +173,8 @@ export function ArtistLinksPanel({ eventId, saved, unsaved }: { eventId: string;
         ) : (
           <ul className="divide-y divide-border">
             {saved.map((a) => {
-              const mine = links.filter((l) => same(l.artist_name, a.name))
+              // Their links: by artist record (survives renames), or by name for older links.
+              const mine = links.filter((l) => (a.id && l.artist_id === a.id) || same(l.artist_name, a.name))
               return (
                 <ArtistRow
                   key={a.name}

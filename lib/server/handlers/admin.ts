@@ -49,7 +49,10 @@ import { str, opt, clientIp, isEmail, type VercelReq, type VercelRes } from '../
 import { ALL_PLACES, showsOn, type DisplayPlace, type VillageEvent } from '@/lib/data/events'
 import { MAX_ARTISTS, MAX_BIO, facebookUrl, instagramHandle, isUploadedImage, websiteUrl, type Artist } from '@/lib/artists'
 import { VOICE_DAYS, setSetting, voiceState } from '../voice-schedule'
-import { InvalidArtist, LINK_DAYS, cleanArtist, createLink, emailLink, findArtist, type ArtistLinkRow } from '../artist-links'
+import { lineupIndex, linkArtists, listArtists, updateArtist } from '../artists'
+import { InvalidAsset, eventAssets, hideAsset, listAssets, registerAsset } from '../assets'
+import { isAssetKind } from '@/lib/assets'
+import { InvalidArtist, LINK_DAYS, cleanArtist, createLink, emailLink, type ArtistLinkRow } from '../artist-links'
 
 type Body = Record<string, any>
 
@@ -374,7 +377,9 @@ function cleanArtists(v: unknown): Artist[] {
     if (bio && bio.length > MAX_BIO) throw new BadRequest(`Keep ${name}’s bio under ${MAX_BIO} characters`)
     if (photo && !isUploadedImage(photo)) throw new BadRequest(`Upload ${name}’s photo with the button`)
     const headliner = r.headliner === true && !out.some((a) => a.headliner)
+    const id = Number(r.id)
     out.push({
+      ...(Number.isInteger(id) && id > 0 && { id }),
       name,
       ...(instagram && { instagram }),
       ...(facebook && { facebook }),
@@ -539,6 +544,11 @@ async function saveEvent(b: Body, me: Admin) {
           updatedAt: row.updated_at,
         })
       }
+      merged.artists = await linkArtists(
+        merged.artists as Artist[],
+        b.base && typeof b.base === 'object' ? (base.artists as Artist[]) : null,
+        me.name,
+      )
       const rows = await query(
         `update events set title=$3, date=$4, time=$5, venue=$6, summary=$7, details=$8, price=$9,
            ticket_url=$10, flyer=$11, ticket_price_cents=$12, capacity=$13, category=$14, kind=$15, subtitle=$16,
@@ -555,6 +565,7 @@ async function saveEvent(b: Body, me: Admin) {
     throw new BadRequest('This event is being edited by someone else right now. Try saving again.')
   }
   const id = await uniqueId('events', slugify(`${mine.title} ${String(mine.date).slice(5)}`))
+  mine.artists = await linkArtists(mine.artists as Artist[], null, me.name)
   const rows = await query(
     `insert into events (id, title, date, time, venue, summary, details, price, ticket_url, flyer, ticket_price_cents, capacity,
        category, kind, subtitle, cta, start_time, end_time, display, artists, updated_by)
@@ -569,7 +580,7 @@ async function saveEvent(b: Body, me: Admin) {
 /** Links that still matter: everything except ones a newer link replaced. Newest first. */
 async function artistLinks() {
   return query(
-    `select l.id, l.event_id, l.artist_name, l.email, l.status, l.created_at, l.created_by, l.expires_at,
+    `select l.id, l.event_id, l.artist_id, l.artist_name, l.email, l.status, l.created_at, l.created_by, l.expires_at,
        l.submitted_at, l.submission, l.reviewed_at, l.reviewed_by, (l.expires_at < now()) as expired,
        e.title as event_title, e.date as event_date, e.artists as event_artists
      from artist_links l join events e on e.id = l.event_id
@@ -587,8 +598,9 @@ async function sendArtistLink(b: Body, me: Admin) {
     [eventId],
   )
   if (!ev) throw new BadRequest('That event no longer exists')
-  if (findArtist(ev.artists, artistName) < 0) throw new BadRequest(`${artistName} isn’t in this event’s saved lineup. Save the event first.`)
-  const { row, url } = await createLink(eventId, artistName, email, me.name)
+  const entry = ev.artists?.[lineupIndex(ev.artists, { artist_name: artistName })]
+  if (!entry) throw new BadRequest(`${artistName} isn’t in this event’s saved lineup. Save the event first.`)
+  const { row, url } = await createLink(eventId, entry.name, email, me.name, entry.id ?? null)
   const emailed = await emailLink({
     to: email,
     artist: artistName,
@@ -610,19 +622,34 @@ async function approveArtistLink(b: Body, me: Admin) {
     const [ev] = await query<Record<string, any>>(`select *, updated_at::text as version from events where id = $1`, [link.event_id])
     if (!ev) throw new BadRequest('That event no longer exists')
     const artists: Artist[] = ev.artists ?? []
-    const i = findArtist(artists, link.artist_name)
+    const i = lineupIndex(artists, link)
     if (i < 0) {
       throw new BadRequest(
         `${link.artist_name} isn’t in the lineup for ${ev.title} anymore. Add them back (or edit the lineup by hand), then approve.`,
       )
     }
     const next = [...artists]
-    next[i] = { ...submitted, ...(artists[i].headliner && { headliner: true }) }
+    const recordId = artists[i].id ?? link.artist_id ?? undefined
+    next[i] = { ...(recordId && { id: recordId }), ...submitted, ...(artists[i].headliner && { headliner: true }) }
     const rows = await query(
       `update events set artists = $3, updated_at = now(), updated_by = $4 where id = $1 and updated_at::text = $2 returning *`,
       [link.event_id, ev.version, JSON.stringify(next), me.name],
     )
     if (!rows.length) continue // someone saved the event at the same moment: read it again
+    if (recordId) {
+      await updateArtist(
+        recordId,
+        {
+          name: submitted.name,
+          instagram: submitted.instagram ?? null,
+          facebook: submitted.facebook ?? null,
+          website: submitted.website ?? null,
+          bio: submitted.bio ?? null,
+          photo: submitted.photo ?? null,
+        },
+        me.name,
+      )
+    }
     await query(`update artist_links set status = 'approved', reviewed_at = now(), reviewed_by = $2 where id = $1`, [
       link.id,
       me.name,
@@ -633,7 +660,7 @@ async function approveArtistLink(b: Body, me: Admin) {
 }
 
 async function closeArtistLink(b: Body, me: Admin, status: 'discarded' | 'revoked') {
-  const from = status === 'discarded' ? ['submitted'] : ['sent', 'submitted']
+  const from = status === 'discarded' ? ['submitted'] : ['sent', 'submitted', 'approved']
   const rows = await query(
     `update artist_links set status = $2, reviewed_at = now(), reviewed_by = $3 where id = $1 and status = any($4) returning id`,
     [Number(b.id), status, me.name, from],
@@ -972,6 +999,12 @@ export default async function handler(req: VercelReq, res: VercelRes) {
           )
         case 'artist-links':
           return ok(await artistLinks())
+        case 'artists':
+          return ok(await listArtists())
+        case 'assets': {
+          const event = str(req.query?.event)
+          return ok(event ? await eventAssets(event) : await listAssets())
+        }
         case 'voice-schedule':
           return ok(await voiceState())
         case 'admins':
@@ -984,6 +1017,22 @@ export default async function handler(req: VercelReq, res: VercelRes) {
       }
     } else {
       switch (action) {
+        case 'asset-add': {
+          if (!isAssetKind(b.kind)) throw new BadRequest('Unknown kind of file')
+          const artistId = b.artistId === null || b.artistId === undefined ? null : Number(b.artistId)
+          return ok(
+            await registerAsset(str(b.url), str(b.filename), {
+              artistId: Number.isInteger(artistId) ? artistId : null,
+              eventId: need(opt(b.eventId, 200), 'Event'),
+              linkId: null,
+              kind: b.kind,
+              by: me.name,
+            }),
+          )
+        }
+        case 'asset-delete':
+          await hideAsset(Number(b.id))
+          return ok({ ok: true })
         case 'artist-link-send':
           return ok(await sendArtistLink(b, me))
         case 'artist-link-approve':
@@ -1116,7 +1165,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
     }
     return res.status(404).json({ error: 'Unknown action' })
   } catch (e) {
-    if (e instanceof BadRequest || e instanceof InvalidArtist) return res.status(400).json({ error: e.message })
+    if (e instanceof BadRequest || e instanceof InvalidArtist || e instanceof InvalidAsset) return res.status(400).json({ error: e.message })
     if (e instanceof Conflict) return res.status(409).json({ error: e.message, ...e.data })
     if (e instanceof Forbidden) return res.status(403).json({ error: e.message })
     console.error(`admin ${action} failed`, e)

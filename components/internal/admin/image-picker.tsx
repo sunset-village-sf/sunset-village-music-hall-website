@@ -22,6 +22,7 @@ export function ImagePicker({
   poster,
   thumb,
   folder,
+  choices = [],
 }: {
   label: string
   /** "flyer", "photo" — used in the button labels. */
@@ -38,6 +39,8 @@ export function ImagePicker({
   thumb?: boolean
   /** Storage folder; flyers by default. */
   folder?: 'artists' | 'newsletter'
+  /** Images already in the asset library to pick from instead of uploading (best first). */
+  choices?: { url: string; label: string }[]
 }) {
   const id = useId()
   const [busy, setBusy] = useState(false)
@@ -100,6 +103,30 @@ export function ImagePicker({
         </div>
       ) : (
         <p className="text-meta text-ink-2">Image uploads aren’t set up yet.</p>
+      )}
+      {choices.length > 0 && (
+        <details className="mt-1">
+          <summary className="cursor-pointer text-meta font-semibold">Or choose from this show’s files ({choices.length})</summary>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {choices.map((c) => (
+              <li key={c.url}>
+                <button
+                  type="button"
+                  onClick={() => onChange(c.url)}
+                  aria-pressed={value === c.url}
+                  title={c.label}
+                  className={cn(
+                    'block rounded-sm border-2 p-0.5',
+                    value === c.url ? 'border-ink' : 'border-transparent hover:border-border',
+                  )}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- library file */}
+                  <img src={c.url} alt={c.label} className="aspect-[4/5] w-24 rounded-xs bg-muted object-cover" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
       <ErrorNote>{error}</ErrorNote>
       {hint && <p className="text-meta text-ink-2">{hint}</p>}

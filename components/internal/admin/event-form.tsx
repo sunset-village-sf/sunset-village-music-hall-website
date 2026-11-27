@@ -19,6 +19,10 @@ import { ArtistsField, firstBadSocial, tidyArtists, toArtistDrafts, type ArtistD
 import type { Artist } from '@/lib/artists'
 import { EditConflict, type EventConflict, type Pick } from './edit-conflict'
 import { ArtistLinksPanel } from './artist-links-panel'
+import { ShowFilesPanel } from './show-files-panel'
+import { getJson } from '@/lib/admin/api'
+import { useLoad } from '@/lib/admin/use-load'
+import { isPreviewable, type Asset } from '@/lib/assets'
 
 export type EventDraft = Omit<Partial<VillageEvent>, 'ticketPrice' | 'capacity' | 'artists'> & {
   ticketPrice?: string
@@ -53,6 +57,15 @@ export function EventForm({
   // didn't touch keep anyone else's newer changes.
   const [base] = useState(() => (initial.id ? { ...initial, artists: tidyArtists(initial.artists ?? []) } : undefined))
   const [conflict, setConflict] = useState<EventConflict | null>(null)
+  // The show's files in the asset library (saved events only).
+  const files = useLoad<Asset[]>(
+    () => (base ? getJson<Asset[]>(`assets&event=${encodeURIComponent(base.id!)}`) : Promise.resolve([])),
+    () => {},
+  )
+  const flyerChoices = (files.data ?? [])
+    .filter((f) => (f.kind === 'flyer' || f.kind === 'photo') && isPreviewable(f.content_type))
+    .sort((x, y) => (x.kind === y.kind ? 0 : x.kind === 'flyer' ? -1 : 1))
+    .map((f) => ({ url: f.url, label: `${f.kind === 'flyer' ? 'Flyer' : 'Photo'} from ${f.artist_name ?? 'the show'}: ${f.filename}` }))
   const [picks, setPicks] = useState<Record<string, Pick>>({})
   const set = (k: keyof EventDraft) => (e: { target: { value: string } }) => setD({ ...d, [k]: e.target.value })
   const display = d.display ?? ALL_PLACES
@@ -196,6 +209,17 @@ export function EventForm({
       </Panel>
 
       {base && (
+        <ShowFilesPanel
+          eventId={base.id!}
+          title={base.title ?? 'show'}
+          lineup={base.artists ?? []}
+          assets={files.data ?? []}
+          reload={files.reload}
+          uploads={setup.uploads}
+        />
+      )}
+
+      {base && (
         <ArtistLinksPanel
           eventId={base.id!}
           saved={base.artists ?? []}
@@ -315,6 +339,7 @@ export function EventForm({
           name={d.title ?? ''}
           hint="Use the same 4:5 image you post on Instagram (1080×1350 is ideal). It’s shown whole on the event card, the event’s page and the home page."
           poster
+          choices={flyerChoices}
         />
       </Panel>
 

@@ -1,16 +1,19 @@
 // Vercel serverless function: /api/artist — the artist's side of an artist link
 // (the page itself, app/(site)/artist/[token], loads the details on the server).
-//   POST ?action=upload  {token, data, contentType}   their photo (resized in the browser first)
-//   POST ?action=submit  {token, name, bio, photo, instagram, facebook, website}
-// Every call needs a link that is still open (not expired, approved or replaced).
+//   POST ?action=file         {token, url, filename, kind}   register a file they uploaded (see /api/upload)
+//   POST ?action=file-delete  {token, id}                    remove one of their own files
+//   POST ?action=submit       {token, name, bio, photo, instagram, facebook, website}
+// Every call needs a link that is still open (not expired, replaced or
+// cancelled). Links stay open after an admin approves the details, so artists
+// can keep adding files; changing their details sends them back for review.
 
-import { put } from '@vercel/blob'
 import { query, hasDb } from '../db'
 import { str, type VercelReq, type VercelRes } from '../http'
 import { InvalidArtist, alertSubmitted, cleanArtist, openLink } from '../artist-links'
+import { InvalidAsset, hideAsset, registerAsset } from '../assets'
+import { isAssetKind } from '@/lib/assets'
 
-const GONE = 'This link has expired or has already been used. Ask us for a new one.'
-const hasBlob = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID)
+const GONE = 'This link has expired or has been replaced. Ask us for a new one.'
 
 export default async function handler(req: VercelReq, res: VercelRes) {
   res.setHeader('Cache-Control', 'no-store')
@@ -22,35 +25,41 @@ export default async function handler(req: VercelReq, res: VercelRes) {
 
   try {
     const action = str(req.query?.action)
-    if (action === 'upload') {
-      if (!hasBlob()) throw new InvalidArtist('Photo uploads aren’t available right now. Send the rest and email us the photo.')
-      const type = str(b.contentType)
-      if (!['image/webp', 'image/jpeg', 'image/png'].includes(type)) throw new InvalidArtist('Use a JPG, PNG or WebP image.')
-      const data = Buffer.from(str(b.data), 'base64')
-      if (data.length === 0 || data.length > 3_500_000) throw new InvalidArtist('That image is too large.')
-      const slug = link.artist_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'artist'
-      const blob = await put(`artists/${slug}.${type.split('/')[1].replace('jpeg', 'jpg')}`, data, {
-        access: 'public',
-        contentType: type,
-        addRandomSuffix: true,
+
+    if (action === 'file') {
+      if (!isAssetKind(b.kind)) throw new InvalidAsset('Unknown kind of file')
+      if (!link.artist_id) throw new InvalidAsset('This link can’t take files. Ask us for a new one.')
+      const asset = await registerAsset(str(b.url), str(b.filename), {
+        artistId: link.artist_id,
+        eventId: link.event_id,
+        linkId: link.id,
+        kind: b.kind,
+        by: 'artist',
       })
-      return res.status(200).json({ url: blob.url })
+      return res.status(200).json(asset)
+    }
+
+    if (action === 'file-delete') {
+      await hideAsset(Number(b.id), link.id)
+      return res.status(200).json({ ok: true })
     }
 
     if (action === 'submit') {
       const artist = cleanArtist(b)
-      const first = link.status === 'sent'
+      // First time, or a change after we approved: tell the team. (Edits while
+      // it's still waiting for review just update what they'll see.)
+      const notify = link.status !== 'submitted'
       await query(`update artist_links set submission = $2, status = 'submitted', submitted_at = now() where id = $1`, [
         link.id,
         JSON.stringify(artist),
       ])
-      if (first) await alertSubmitted(artist.name, { title: link.title }).catch((e) => console.error('artist alert failed', e))
+      if (notify) await alertSubmitted(artist.name, { title: link.title }).catch((e) => console.error('artist alert failed', e))
       return res.status(200).json({ ok: true })
     }
 
     return res.status(404).json({ error: 'Unknown action' })
   } catch (e) {
-    if (e instanceof InvalidArtist) return res.status(400).json({ error: e.message })
+    if (e instanceof InvalidArtist || e instanceof InvalidAsset) return res.status(400).json({ error: e.message })
     console.error('artist link failed', e)
     return res.status(500).json({ error: 'Something went wrong. Try again.' })
   }
