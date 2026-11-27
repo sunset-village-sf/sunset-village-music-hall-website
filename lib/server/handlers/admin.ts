@@ -47,7 +47,8 @@ import { loadContent } from '../content'
 import { todayISO, upcoming } from '@/lib/events'
 import { str, opt, clientIp, isEmail, type VercelReq, type VercelRes } from '../http'
 import { ALL_PLACES, showsOn, type DisplayPlace, type VillageEvent } from '@/lib/data/events'
-import { MAX_ARTISTS, facebookUrl, instagramHandle, websiteUrl, type Artist } from '@/lib/artists'
+import { MAX_ARTISTS, MAX_BIO, facebookUrl, instagramHandle, isUploadedImage, websiteUrl, type Artist } from '@/lib/artists'
+import { InvalidArtist, LINK_DAYS, cleanArtist, createLink, emailLink, findArtist, type ArtistLinkRow } from '../artist-links'
 
 type Body = Record<string, any>
 
@@ -359,7 +360,9 @@ function cleanArtists(v: unknown): Artist[] {
     const ig = opt(r?.instagram, 200)
     const fb = opt(r?.facebook, 300)
     const web = opt(r?.website, 300)
-    if (!name && !ig && !fb && !web) continue
+    const bio = opt(r?.bio, MAX_BIO + 50)
+    const photo = opt(r?.photo, 500)
+    if (!name && !ig && !fb && !web && !bio && !photo) continue
     if (!name) throw new BadRequest('Give each artist a name')
     const instagram = ig ? instagramHandle(ig) : null
     if (ig && !instagram) throw new BadRequest(`${name}’s Instagram doesn’t look like a username`)
@@ -367,8 +370,18 @@ function cleanArtists(v: unknown): Artist[] {
     if (fb && !facebook) throw new BadRequest(`${name}’s Facebook doesn’t look like a Facebook page`)
     const website = web ? websiteUrl(web) : null
     if (web && !website) throw new BadRequest(`${name}’s website doesn’t look like a web address`)
+    if (bio && bio.length > MAX_BIO) throw new BadRequest(`Keep ${name}’s bio under ${MAX_BIO} characters`)
+    if (photo && !isUploadedImage(photo)) throw new BadRequest(`Upload ${name}’s photo with the button`)
     const headliner = r.headliner === true && !out.some((a) => a.headliner)
-    out.push({ name, ...(instagram && { instagram }), ...(facebook && { facebook }), ...(website && { website }), ...(headliner && { headliner }) })
+    out.push({
+      name,
+      ...(instagram && { instagram }),
+      ...(facebook && { facebook }),
+      ...(website && { website }),
+      ...(bio && { bio }),
+      ...(photo && { photo }),
+      ...(headliner && { headliner }),
+    })
   }
   if (out.length > MAX_ARTISTS) throw new BadRequest(`Up to ${MAX_ARTISTS} artists per event`)
   return out
@@ -550,6 +563,84 @@ async function saveEvent(b: Body, me: Admin) {
   return withCalendar(rows[0])
 }
 
+// ── Artist links ───────────────────────────────────────────────────────
+
+/** Links that still matter: everything except ones a newer link replaced. Newest first. */
+async function artistLinks() {
+  return query(
+    `select l.id, l.event_id, l.artist_name, l.email, l.status, l.created_at, l.created_by, l.expires_at,
+       l.submitted_at, l.submission, l.reviewed_at, l.reviewed_by, (l.expires_at < now()) as expired,
+       e.title as event_title, e.date as event_date, e.artists as event_artists
+     from artist_links l join events e on e.id = l.event_id
+     where l.status <> 'replaced' order by l.created_at desc limit 300`,
+  )
+}
+
+async function sendArtistLink(b: Body, me: Admin) {
+  const eventId = need(opt(b.eventId, 200), 'Event')
+  const artistName = need(opt(b.artistName, 100), 'Artist')
+  const email = str(b.email).trim().toLowerCase()
+  if (!isEmail(email)) throw new BadRequest('Enter the artist’s email address')
+  const [ev] = await query<{ title: string; date: string; artists: Artist[] }>(
+    `select title, date, artists from events where id = $1`,
+    [eventId],
+  )
+  if (!ev) throw new BadRequest('That event no longer exists')
+  if (findArtist(ev.artists, artistName) < 0) throw new BadRequest(`${artistName} isn’t in this event’s saved lineup. Save the event first.`)
+  const { row, url } = await createLink(eventId, artistName, email, me.name)
+  const emailed = await emailLink({
+    to: email,
+    artist: artistName,
+    event: ev,
+    url,
+    expires: row.expires_at,
+    replyTo: me.email,
+  })
+  return { ...row, url, emailed, days: LINK_DAYS }
+}
+
+/** Put an artist's submitted details into the event's lineup (keeping their headliner spot). */
+async function approveArtistLink(b: Body, me: Admin) {
+  const [link] = await query<ArtistLinkRow>(`select * from artist_links where id = $1`, [Number(b.id)])
+  if (!link) throw new BadRequest('That link no longer exists')
+  if (link.status !== 'submitted' || !link.submission) throw new BadRequest('There’s nothing to approve for this link')
+  const submitted = cleanArtist(link.submission as unknown as Body)
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const [ev] = await query<Record<string, any>>(`select *, updated_at::text as version from events where id = $1`, [link.event_id])
+    if (!ev) throw new BadRequest('That event no longer exists')
+    const artists: Artist[] = ev.artists ?? []
+    const i = findArtist(artists, link.artist_name)
+    if (i < 0) {
+      throw new BadRequest(
+        `${link.artist_name} isn’t in the lineup for ${ev.title} anymore. Add them back (or edit the lineup by hand), then approve.`,
+      )
+    }
+    const next = [...artists]
+    next[i] = { ...submitted, ...(artists[i].headliner && { headliner: true }) }
+    const rows = await query(
+      `update events set artists = $3, updated_at = now(), updated_by = $4 where id = $1 and updated_at::text = $2 returning *`,
+      [link.event_id, ev.version, JSON.stringify(next), me.name],
+    )
+    if (!rows.length) continue // someone saved the event at the same moment: read it again
+    await query(`update artist_links set status = 'approved', reviewed_at = now(), reviewed_by = $2 where id = $1`, [
+      link.id,
+      me.name,
+    ])
+    return withCalendar(rows[0])
+  }
+  throw new BadRequest('The event is being edited by someone else right now. Try again.')
+}
+
+async function closeArtistLink(b: Body, me: Admin, status: 'discarded' | 'revoked') {
+  const from = status === 'discarded' ? ['submitted'] : ['sent', 'submitted']
+  const rows = await query(
+    `update artist_links set status = $2, reviewed_at = now(), reviewed_by = $3 where id = $1 and status = any($4) returning id`,
+    [Number(b.id), status, me.name, from],
+  )
+  if (!rows.length) throw new BadRequest('That link has already been dealt with. Reload to see the latest.')
+  return { ok: true }
+}
+
 // ── Google Calendar ────────────────────────────────────────────────────
 
 const toCalendar = (r: Record<string, any>) => ({
@@ -652,7 +743,7 @@ async function upload(b: Body) {
   const data = Buffer.from(str(b.data), 'base64')
   if (data.length === 0 || data.length > 3_500_000) throw new BadRequest('Image is too large')
   const ext = type.split('/')[1].replace('jpeg', 'jpg')
-  const folder = b.folder === 'newsletter' ? 'newsletter' : 'flyers'
+  const folder = b.folder === 'newsletter' ? 'newsletter' : b.folder === 'artists' ? 'artists' : 'flyers'
   const blob = await put(`${folder}/${slugify(str(b.name)) || 'image'}.${ext}`, data, {
     access: 'public',
     contentType: type,
@@ -825,6 +916,9 @@ export default async function handler(req: VercelReq, res: VercelRes) {
         backups: Boolean(process.env.CRON_SECRET) && hasEmail() && (await hasAlertRecipient('backup')),
         newBookings: hall,
         newLeasing: leasing,
+        artistInfo: (
+          await query<{ n: number }>(`select count(*)::int as n from artist_links where status = 'submitted'`).catch(() => [{ n: 0 }])
+        )[0].n,
         // Still signing in with the shared setup password: nudge them to pick their own.
         usingSetupPassword: checkPassword(
           process.env.ADMIN_PASSWORD!,
@@ -861,6 +955,8 @@ export default async function handler(req: VercelReq, res: VercelRes) {
                left join events e on e.id = o.event_id order by e.date desc nulls last, o.created_at`,
             ),
           )
+        case 'artist-links':
+          return ok(await artistLinks())
         case 'admins':
           return ok(
             await query(
@@ -871,6 +967,14 @@ export default async function handler(req: VercelReq, res: VercelRes) {
       }
     } else {
       switch (action) {
+        case 'artist-link-send':
+          return ok(await sendArtistLink(b, me))
+        case 'artist-link-approve':
+          return ok(await approveArtistLink(b, me))
+        case 'artist-link-discard':
+          return ok(await closeArtistLink(b, me, 'discarded'))
+        case 'artist-link-revoke':
+          return ok(await closeArtistLink(b, me, 'revoked'))
         case 'event-save':
           return ok(await saveEvent(b, me))
         case 'event-delete': {
@@ -993,7 +1097,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
     }
     return res.status(404).json({ error: 'Unknown action' })
   } catch (e) {
-    if (e instanceof BadRequest) return res.status(400).json({ error: e.message })
+    if (e instanceof BadRequest || e instanceof InvalidArtist) return res.status(400).json({ error: e.message })
     if (e instanceof Conflict) return res.status(409).json({ error: e.message, ...e.data })
     if (e instanceof Forbidden) return res.status(403).json({ error: e.message })
     console.error(`admin ${action} failed`, e)

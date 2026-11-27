@@ -18,6 +18,7 @@ import { ImagePicker } from './image-picker'
 import { ArtistsField, firstBadSocial, tidyArtists, toArtistDrafts, type ArtistDraft } from './artists-field'
 import type { Artist } from '@/lib/artists'
 import { EditConflict, type EventConflict, type Pick } from './edit-conflict'
+import { ArtistLinksPanel } from './artist-links-panel'
 
 export type EventDraft = Omit<Partial<VillageEvent>, 'ticketPrice' | 'capacity' | 'artists'> & {
   ticketPrice?: string
@@ -190,8 +191,21 @@ export function EventForm({
           onChange={(artists) => setD({ ...d, artists })}
           known={knownArtists}
           showErrors={showArtistErrors}
+          uploads={setup.uploads}
         />
       </Panel>
+
+      {base && (
+        <ArtistLinksPanel
+          eventId={base.id!}
+          saved={base.artists ?? []}
+          unsaved={
+            tidyArtists(d.artists ?? [])
+              .map((a) => a.name.toLowerCase())
+              .join('\n') !== (base.artists ?? []).map((a) => a.name.toLowerCase()).join('\n')
+          }
+        />
+      )}
 
       <Panel title="Where it shows">
         <fieldset className="flex flex-col gap-3">

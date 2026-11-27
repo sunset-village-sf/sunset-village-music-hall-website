@@ -3,6 +3,7 @@
 
 import type { RequestKind, RequestStatus } from '@/lib/requests'
 import type { AlertKind, Role } from '@/lib/team'
+import type { Artist } from '@/lib/artists'
 
 export class SignedOut extends Error {}
 
@@ -84,7 +85,30 @@ export interface Me extends Setup {
   admin: { id: number; email: string; name: string; role: Role }
   newBookings: number
   newLeasing: number
+  /** Artist submissions waiting for review. */
+  artistInfo: number
   usingSetupPassword: boolean
+}
+
+export type ArtistLinkStatus = 'sent' | 'submitted' | 'approved' | 'discarded' | 'revoked'
+
+export interface ArtistLink {
+  id: number
+  event_id: string
+  artist_name: string
+  email: string
+  status: ArtistLinkStatus
+  created_at: string
+  created_by: string | null
+  expires_at: string
+  expired: boolean
+  submitted_at: string | null
+  submission: Artist | null
+  reviewed_at: string | null
+  reviewed_by: string | null
+  event_title: string
+  event_date: string
+  event_artists: Artist[] | null
 }
 
 export interface AdminUser {

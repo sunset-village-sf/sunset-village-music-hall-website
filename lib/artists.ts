@@ -11,9 +11,24 @@ export interface Artist {
   website?: string
   /** At most one per event. */
   headliner?: boolean
+  /** A few sentences about them, shown in the event page's lineup. */
+  bio?: string
+  /** One photo, uploaded to the site's image storage. */
+  photo?: string
 }
 
 export const MAX_ARTISTS = 20
+export const MAX_BIO = 600
+
+/** An image uploaded through this site (Vercel Blob), not a link to anywhere else. */
+export const isUploadedImage = (url: string) => {
+  try {
+    const u = new URL(url)
+    return u.protocol === 'https:' && u.hostname.endsWith('.public.blob.vercel-storage.com')
+  } catch {
+    return false
+  }
+}
 
 const stripHost = (s: string) => s.trim().replace(/^https?:\/\//i, '').replace(/^(www|m|web)\./i, '')
 

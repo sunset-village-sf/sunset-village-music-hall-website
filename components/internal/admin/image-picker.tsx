@@ -20,6 +20,8 @@ export function ImagePicker({
   name,
   hint,
   poster,
+  thumb,
+  folder,
 }: {
   label: string
   /** "flyer", "photo" — used in the button labels. */
@@ -32,6 +34,10 @@ export function ImagePicker({
   hint?: string
   /** Preview in the 4:5 poster frame the site shows flyers in. */
   poster?: boolean
+  /** Small square preview (artist photos). */
+  thumb?: boolean
+  /** Storage folder; flyers by default. */
+  folder?: 'artists' | 'newsletter'
 }) {
   const id = useId()
   const [busy, setBusy] = useState(false)
@@ -43,7 +49,7 @@ export function ImagePicker({
     setError('')
     try {
       const img = await prepareImage(file)
-      const { url } = await postJson<{ url: string }>('upload', { ...img, name: name || noun })
+      const { url } = await postJson<{ url: string }>('upload', { ...img, name: name || noun, folder })
       onChange(url)
     } catch (e) {
       setError((e as Error).message)
@@ -62,7 +68,11 @@ export function ImagePicker({
           alt=""
           className={cn(
             'rounded-md border border-border',
-            poster ? 'aspect-[4/5] w-48 bg-muted object-contain' : 'max-h-64 w-fit max-w-full',
+            poster
+              ? 'aspect-[4/5] w-48 bg-muted object-contain'
+              : thumb
+                ? 'size-24 object-cover'
+                : 'max-h-64 w-fit max-w-full',
           )}
         />
       )}

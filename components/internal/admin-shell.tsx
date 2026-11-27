@@ -33,6 +33,7 @@ export function useAdmin() {
 const TABS = [
   { href: '/admin/overview', label: 'Overview' },
   { href: '/admin/events', label: 'Events' },
+  { href: '/admin/artists', label: 'Artist info', badge: 'artistInfo' as const },
   { href: '/admin/requests', label: 'Hall requests', badge: 'newBookings' as const },
   { href: '/admin/leasing', label: 'Leasing', badge: 'newLeasing' as const },
   { href: '/admin/tickets', label: 'Tickets' },
