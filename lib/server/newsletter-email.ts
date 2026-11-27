@@ -230,30 +230,36 @@ const short = (iso: string) => {
 export const weekLabel = (start: string, end: string) =>
   start.slice(0, 7) === end.slice(0, 7) ? `${dateParts(start).day}–${short(end)}` : `${short(start)} – ${short(end)}`
 
-export const defaultSubject = (start: string, end: string) =>
-  `${site.newsletter}: this week in the fog (${weekLabel(start, end)})`
+/** Issues longer than a week (the every-other-week automatic ones) say "the next two weeks". */
+const twoWeeks = (start: string, end: string) => Date.parse(end) - Date.parse(start) > 7 * 864e5
+const span = (start: string, end: string) => (twoWeeks(start, end) ? 'the next two weeks' : 'this week')
 
-const defaultNote = (n: number) =>
+export const defaultSubject = (start: string, end: string) =>
+  twoWeeks(start, end)
+    ? `${site.newsletter}: two weeks in the fog (${weekLabel(start, end)})`
+    : `${site.newsletter}: this week in the fog (${weekLabel(start, end)})`
+
+const defaultNote = (n: number, i: Pick<Issue, 'start' | 'end'>) =>
   n === 0
-    ? 'No shows at the Music Hall this week. Here’s what’s coming up next.'
-    : `Here’s what’s on at the Music Hall this week, out at ${site.corner}.`
+    ? `No shows at the Music Hall ${span(i.start, i.end)}. Here’s what’s coming up next.`
+    : `Here’s what’s on at the Music Hall ${span(i.start, i.end)}, out at ${site.corner}.`
 
 export function issueHtml(i: Issue, f: Omit<Frame, 'preheader'>) {
   const note = i.note?.trim() ?? ''
   const fr = {
     ...f,
-    preheader: (note && firstWords(note)) || i.events.map((e) => e.title).join(' · ') || defaultNote(0),
+    preheader: (note && firstWords(note)) || i.events.map((e) => e.title).join(' · ') || defaultNote(0, i),
   }
   const quiet = i.events.length === 0
   const masthead = `<div style="margin-top:30px">${eyebrow(fr, `${site.newsletter} · ${weekLabel(i.start, i.end)}`, c('yellow'), 'yellow')}</div>
 <h1 class="sv-h1" style="margin:14px 0 0;font-family:${display};font-size:56px;font-weight:800;line-height:0.95;letter-spacing:-0.04em;color:${c('fog')}">
-${quiet ? 'A quiet week in the' : 'This week in the'} <span style="color:${c('sun')}">fog.</span></h1>
-<div style="margin-top:18px">${noteHtml(defaultNote(i.events.length), c('mist'), c('yellow'), 18)}</div>`
+${quiet ? (twoWeeks(i.start, i.end) ? 'A quiet spell in the' : 'A quiet week in the') : twoWeeks(i.start, i.end) ? 'Two weeks in the' : 'This week in the'} <span style="color:${c('sun')}">fog.</span></h1>
+<div style="margin-top:18px">${noteHtml(defaultNote(i.events.length, i), c('mist'), c('yellow'), 18)}</div>`
 
   const week = quiet
     ? ''
     : `<div style="margin:0 0 6px">${eyebrow(fr, 'On the calendar', c('ink'), 'sun')}</div>
-<h2 style="margin:6px 0 20px;font-family:${display};font-size:32px;font-weight:800;line-height:1.05;letter-spacing:-0.02em;color:${c('ink')}">This week</h2>
+<h2 style="margin:6px 0 20px;font-family:${display};font-size:32px;font-weight:800;line-height:1.05;letter-spacing:-0.02em;color:${c('ink')}">${twoWeeks(i.start, i.end) ? 'The next two weeks' : 'This week'}</h2>
 ${i.events.map((e) => eventCard(fr, e)).join('\n')}`
 
   const later = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${c('teal')};border:2px solid ${c('ink')};border-radius:32px;margin:${quiet ? 0 : 18}px 0 18px">
@@ -290,9 +296,9 @@ export function issueText(i: Issue, unsubscribeUrl: string) {
   }
   return [
     `${site.newsletter.toUpperCase()} · ${weekLabel(i.start, i.end)}`,
-    defaultNote(i.events.length),
+    defaultNote(i.events.length, i),
     ...(i.note?.trim() ? [noteText(i.note)] : []),
-    ...(i.events.length ? ['THIS WEEK', ...i.events.map(line)] : []),
+    ...(i.events.length ? [twoWeeks(i.start, i.end) ? 'THE NEXT TWO WEEKS' : 'THIS WEEK', ...i.events.map(line)] : []),
     ...(i.later.length ? ['FURTHER OUT', ...i.later.map(line)] : []),
     `Full calendar: ${SITE_URL}/events\nBook the hall: ${SITE_URL}/book`,
     `--\n${site.name} · ${fullAddress}\nUnsubscribe: ${unsubscribeUrl}`,
