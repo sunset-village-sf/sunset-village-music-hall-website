@@ -70,11 +70,13 @@ export default async function EventPage({ params }: Props) {
       />
 
       <Section className="flex flex-wrap items-start gap-8 pt-12 pb-22">
+        {/* On its own row, so the flyer and the tickets card line up at the top. */}
+        <Link href="/events" className="-mb-2 basis-full font-bold">
+          ← All events
+        </Link>
         <div className="flex min-w-0 flex-[1.4_1_480px] flex-col gap-6">
-          <Link href="/events" className="font-bold">
-            ← All events
-          </Link>
           <PosterArt
+            sizes="(max-width: 640px) 100vw, 800px"
             category={categoryOf(event)}
             dow={dow}
             day={day}
