@@ -2,6 +2,8 @@
 // Shared by the admin form (to tidy what people paste) and the API (to check it).
 
 export interface Artist {
+  /** The artist's record (shared across events). Missing until the event is saved. */
+  id?: number
   name: string
   /** Instagram username, lowercase, no @. Used to invite the artist to collaborate on posts. */
   instagram?: string

@@ -5,6 +5,7 @@
 
 import { useState } from 'react'
 import { getJson, postJson } from '@/lib/admin/api'
+import type { Artist } from '@/lib/artists'
 import { useLoad } from '@/lib/admin/use-load'
 import { dollars, eventHref, past as pastEvents, upcoming as upcomingEvents } from '@/lib/events'
 import { DISPLAY_PLACES, showsOn, type VillageEvent } from '@/lib/data/events'
@@ -59,6 +60,8 @@ function Row({ e, onEdit, onCopy }: { e: VillageEvent; onEdit: () => void; onCop
 export default function EventsPage() {
   const { me, signedOut } = useAdmin()
   const { data, error, reload } = useLoad(() => getJson<VillageEvent[]>('events'), signedOut)
+  // Artist records, newest first: name suggestions in the lineup editor.
+  const artists = useLoad(() => getJson<Artist[]>('artists'), signedOut)
   const [editing, setEditing] = useState<EventDraft | null>(null)
   const [saved, setSaved] = useState<
     | (VillageEvent & { calendar?: 'synced' | 'failed' | 'off'; keptFrom?: { by: string | null; fields: string[] } })
@@ -92,12 +95,10 @@ export default function EventsPage() {
         <EventForm
           initial={editing}
           setup={me}
-          knownArtists={(data ?? [])
-            .filter((e) => e.id !== editing.id)
-            .sort((a, b) => b.date.localeCompare(a.date))
-            .flatMap((e) => e.artists ?? [])}
+          knownArtists={artists.data ?? []}
           onDone={(ev) => {
             setEditing(null)
+            artists.reload()
             setSaved(ev ?? null)
             reload()
             window.scrollTo(0, 0)

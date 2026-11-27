@@ -151,6 +151,42 @@ const schema = [
     reviewed_by text
   )`,
   `create index if not exists artist_links_event on artist_links (event_id)`,
+  // One record per artist, shared by every event they play. Each entry in an
+  // event's lineup (events.artists) keeps a copy of their details plus this id.
+  `create table if not exists artists (
+    id serial primary key,
+    name text not null,
+    instagram text,
+    facebook text,
+    website text,
+    bio text,
+    photo text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    updated_by text
+  )`,
+  `create index if not exists artists_name on artists (lower(name))`,
+  `alter table artist_links add column if not exists artist_id int references artists(id) on delete set null`,
+  // The artist asset library: a show's photos, flyers and documents, filed by
+  // artist (null = the show itself) and event. Files are kept; deleting one
+  // in the admin only hides it (deleted_at).
+  `create table if not exists artist_assets (
+    id serial primary key,
+    artist_id int references artists(id) on delete set null,
+    event_id text references events(id) on delete set null,
+    link_id int references artist_links(id) on delete set null,
+    kind text not null,
+    url text not null,
+    pathname text not null,
+    filename text not null,
+    content_type text,
+    size int,
+    uploaded_by text not null,
+    created_at timestamptz not null default now(),
+    deleted_at timestamptz
+  )`,
+  `create index if not exists artist_assets_artist on artist_assets (artist_id)`,
+  `create index if not exists artist_assets_event on artist_assets (event_id)`,
   `alter table bookings add column if not exists org text`,
   `alter table bookings add column if not exists phone text`,
   `alter table bookings add column if not exists backup_date text`,
@@ -240,4 +276,54 @@ if (tenantCount === 0) {
   console.log(`Seeded ${tenants.length} shops.`)
 } else {
   console.log(`tenants already has ${tenantCount} rows; not seeding.`)
+}
+
+// Give every artist in every lineup an artist record (once; safe to re-run).
+// Same name, ignoring case and spaces = same artist. Walks events oldest
+// first, so the newest details win.
+{
+  const key = (n) => String(n ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+  const byName = new Map(
+    (await sql.query('select id, name from artists order by updated_at')).map((r) => [key(r.name), r.id]),
+  )
+  const FIELDS = ['instagram', 'facebook', 'website', 'bio', 'photo']
+  let linked = 0
+  let created = 0
+  for (const ev of await sql.query(`select id, artists from events where jsonb_array_length(artists) > 0 order by date`)) {
+    let changed = false
+    const lineup = []
+    for (const a of ev.artists) {
+      if (!a?.name) {
+        lineup.push(a)
+        continue
+      }
+      let id = Number.isInteger(a.id) ? a.id : byName.get(key(a.name))
+      if (!id) {
+        ;[{ id }] = await sql.query(
+          `insert into artists (name, ${FIELDS.join(', ')}, updated_by) values ($1, $2, $3, $4, $5, $6, 'setup') returning id`,
+          [a.name, ...FIELDS.map((f) => a[f] ?? null)],
+        )
+        byName.set(key(a.name), id)
+        created++
+      } else if (!Number.isInteger(a.id)) {
+        // A later event: its details are newer.
+        await sql.query(
+          `update artists set name = $2, ${FIELDS.map((f, i) => `${f} = coalesce($${i + 3}, ${f})`).join(', ')}, updated_at = now() where id = $1`,
+          [id, a.name, ...FIELDS.map((f) => a[f] ?? null)],
+        )
+      }
+      if (a.id !== id) {
+        changed = true
+        linked++
+      }
+      lineup.push({ ...a, id })
+    }
+    if (changed) await sql.query(`update events set artists = $2 where id = $1`, [ev.id, JSON.stringify(lineup)])
+  }
+  await sql.query(
+    `update artist_links l set artist_id = (a->>'id')::int
+     from events e, jsonb_array_elements(e.artists) a
+     where l.artist_id is null and e.id = l.event_id and lower(a->>'name') = lower(l.artist_name) and a ? 'id'`,
+  )
+  if (linked) console.log(`Linked ${linked} lineup entries to artist records (${created} new).`)
 }

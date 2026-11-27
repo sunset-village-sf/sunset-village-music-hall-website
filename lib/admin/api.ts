@@ -95,6 +95,7 @@ export type ArtistLinkStatus = 'sent' | 'submitted' | 'approved' | 'discarded' |
 export interface ArtistLink {
   id: number
   event_id: string
+  artist_id: number | null
   artist_name: string
   email: string
   status: ArtistLinkStatus

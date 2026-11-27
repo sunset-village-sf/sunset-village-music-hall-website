@@ -28,6 +28,7 @@ export type LinkStatus = 'sent' | 'submitted' | 'approved' | 'discarded' | 'repl
 
 export interface ArtistLinkRow {
   id: number
+  artist_id: number | null
   event_id: string
   artist_name: string
   email: string
@@ -47,20 +48,16 @@ export class InvalidArtist extends Error {}
 export const hashToken = (token: string) => createHash('sha256').update(`sv-artist:${token}`).digest('hex')
 export const linkUrl = (token: string) => `${SITE_URL}/artist/${token}`
 
-/** The link if it can still be used: not expired, not approved, discarded, replaced or revoked. */
+/** The link if it can still be used: not expired, replaced, cancelled or discarded. Approved links stay open for files. */
 export async function openLink(token: string) {
   if (!/^[A-Za-z0-9_-]{20,100}$/.test(token)) return null
   const [row] = await query<ArtistLinkRow & { title: string; date: string; artists: Artist[] }>(
     `select l.*, e.title, e.date, e.artists from artist_links l join events e on e.id = l.event_id
-     where l.token_hash = $1 and l.status in ('sent', 'submitted') and l.expires_at > now()`,
+     where l.token_hash = $1 and l.status in ('sent', 'submitted', 'approved') and l.expires_at > now()`,
     [hashToken(token)],
   )
   return row ?? null
 }
-
-/** Find an artist in a lineup by name, ignoring case and extra spaces. */
-export const findArtist = (artists: Artist[] = [], name: string) =>
-  artists.findIndex((a) => a.name.trim().toLowerCase() === name.trim().toLowerCase())
 
 /** Check and tidy one artist's details. Throws InvalidArtist with a message for the person who typed them. */
 export function cleanArtist(b: Record<string, unknown>): Artist {
@@ -90,16 +87,16 @@ export function cleanArtist(b: Record<string, unknown>): Artist {
 }
 
 /** Make a new link for one artist on an event. Any earlier open link for them is replaced. */
-export async function createLink(eventId: string, artistName: string, email: string, by: string) {
+export async function createLink(eventId: string, artistName: string, email: string, by: string, artistId: number | null) {
   const token = randomBytes(24).toString('base64url')
   await query(
-    `update artist_links set status = 'replaced' where event_id = $1 and lower(artist_name) = lower($2) and status in ('sent', 'submitted')`,
+    `update artist_links set status = 'replaced' where event_id = $1 and lower(artist_name) = lower($2) and status in ('sent', 'submitted', 'approved')`,
     [eventId, artistName],
   )
   const [row] = await query<ArtistLinkRow>(
-    `insert into artist_links (token_hash, event_id, artist_name, email, created_by, expires_at)
-     values ($1, $2, $3, $4, $5, now() + interval '${LINK_DAYS} days') returning *`,
-    [hashToken(token), eventId, artistName, email, by],
+    `insert into artist_links (token_hash, event_id, artist_name, email, created_by, expires_at, artist_id)
+     values ($1, $2, $3, $4, $5, now() + interval '${LINK_DAYS} days', $6) returning *`,
+    [hashToken(token), eventId, artistName, email, by, artistId],
   )
   return { row, token, url: linkUrl(token) }
 }
@@ -124,11 +121,11 @@ export function emailLink(o: {
     '',
     `You’re on the lineup for ${o.event.title} at Sunset Village Music Hall on ${longDate(o.event.date)}.`,
     '',
-    'So we get the details right on our website and posts, please check how your name is spelled and add a short bio, a photo and your links here:',
+    'So we get the details right on our website and posts, please check how your name is spelled and add a short bio, photos and your links here. You can also send us your flyer if you made one, and your rider or stage plot:',
     '',
     o.url,
     '',
-    `The link works until ${shortDate(o.expires)}. You can come back and change things until we’ve put them up.`,
+    `The link works until ${shortDate(o.expires)}. Come back any time before then to change things or add files.`,
     '',
     'Thanks!',
     'Sunset Village Music Hall',

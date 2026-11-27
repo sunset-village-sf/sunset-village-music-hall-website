@@ -100,12 +100,12 @@ export function ArtistsField({
   const update = (key: string, patch: Partial<Artist>) =>
     onChange(value.map((a) => (a.key === key ? { ...a, ...patch } : a)))
 
-  /** A known name fills in socials that are still empty. */
+  /** A known name links the artist's record and fills in details that are still empty. */
   function fromKnown(a: ArtistDraft, name: string): Partial<Artist> {
     const match = byName.get(name.trim().toLowerCase())
-    const fill: Partial<Artist> = {}
+    const fill: Partial<Artist> = match?.id ? { id: match.id } : {}
     for (const f of [...SOCIALS, 'bio', 'photo'] as const) if (match && !a[f] && match[f]) fill[f] = match[f]
-    if (Object.keys(fill).length) setAnnounce(`Filled in ${match!.name}’s details from an earlier event.`)
+    if (Object.keys(fill).some((k) => k !== 'id')) setAnnounce(`Filled in ${match!.name}’s details from an earlier event.`)
     return fill
   }
 
@@ -113,7 +113,10 @@ export function ArtistsField({
   function setName(a: ArtistDraft, name: string, inputType?: string) {
     const typing = inputType?.startsWith('insert') && inputType !== 'insertReplacementText'
     const deleting = inputType?.startsWith('delete')
-    update(a.key, { name, ...(typing || deleting ? {} : fromKnown(a, name)) })
+    // A different name is a different artist: unlink the record (picking a
+    // known name links theirs). Fixing case or spacing keeps it.
+    const unlink = a.id && name.trim().toLowerCase() !== a.name.trim().toLowerCase() ? { id: undefined } : {}
+    update(a.key, { name, ...unlink, ...(typing || deleting ? {} : fromKnown(a, name)) })
   }
 
   function leaveName(a: ArtistDraft) {
