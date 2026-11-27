@@ -48,6 +48,7 @@ import { todayISO, upcoming } from '@/lib/events'
 import { str, opt, clientIp, isEmail, type VercelReq, type VercelRes } from '../http'
 import { ALL_PLACES, showsOn, type DisplayPlace, type VillageEvent } from '@/lib/data/events'
 import { MAX_ARTISTS, MAX_BIO, facebookUrl, instagramHandle, isUploadedImage, websiteUrl, type Artist } from '@/lib/artists'
+import { VOICE_DAYS, setSetting, voiceState } from '../voice-schedule'
 import { InvalidArtist, LINK_DAYS, cleanArtist, createLink, emailLink, findArtist, type ArtistLinkRow } from '../artist-links'
 
 type Body = Record<string, any>
@@ -837,9 +838,11 @@ const addDays = (iso: string, n: number) => {
 }
 
 /** The week's issue from the calendar: shows on the website from `start` for 7 days, plus the next few after. */
-async function buildIssue(b: Body): Promise<Issue> {
+/** An issue from the calendar: `days` long (7 for a manual issue, 14 for the automatic one), starting `start`. */
+export async function buildIssue(b: Body): Promise<Issue> {
   const start = isoDate(b.start) ?? todayISO()
-  const end = addDays(start, 6)
+  const days = Number(b.days) === VOICE_DAYS ? VOICE_DAYS : 7
+  const end = addDays(start, days - 1)
   const events = upcoming((await loadContent()).events)
   return {
     start,
@@ -862,15 +865,27 @@ async function voicePreview(b: Body) {
 }
 
 async function sendVoice(b: Body, req: VercelReq) {
-  const issue = await buildIssue(b)
+  return sendIssue(await buildIssue(b), assetBase(req), b)
+}
+
+/** Send an issue to every subscriber (or, with b.test, to one address). Also used by the automatic send. */
+export async function sendIssue(issue: Issue, assets: string, b: Body = {}) {
   const subject = opt(b.subject, 200) ?? defaultSubject(issue.start, issue.end)
-  const assets = assetBase(req)
   return sendToList(
     b,
     subject,
     (unsub) => ({ text: issueText(issue, unsub), html: issueHtml(issue, { assets, unsubscribeUrl: unsub }) }),
     issueText(issue, '').split('\n\n--\n')[0],
   )
+}
+
+/** The automatic Village Voice: on/off, skip the next issue, its note. */
+async function saveVoiceSchedule(b: Body) {
+  const state = await voiceState()
+  if (typeof b.auto === 'boolean') await setSetting('voice_auto', b.auto ? 'on' : 'off')
+  if (typeof b.skip === 'boolean') await setSetting('voice_skip', b.skip ? state.next : null)
+  if (typeof b.note === 'string') await setSetting('voice_note', opt(b.note, 20000))
+  return voiceState()
 }
 
 // ── Router ─────────────────────────────────────────────────────────────
@@ -957,6 +972,8 @@ export default async function handler(req: VercelReq, res: VercelRes) {
           )
         case 'artist-links':
           return ok(await artistLinks())
+        case 'voice-schedule':
+          return ok(await voiceState())
         case 'admins':
           return ok(
             await query(
@@ -1032,6 +1049,8 @@ export default async function handler(req: VercelReq, res: VercelRes) {
           return ok(await voicePreview(b))
         case 'voice-send':
           return ok(await sendVoice(b, req))
+        case 'voice-schedule':
+          return ok(await saveVoiceSchedule(b))
         case 'booking-form': {
           // Blank = the site's own form (requests land under Hall requests).
           const url = opt(b.url, 500)

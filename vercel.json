@@ -31,6 +31,14 @@
     {
       "path": "/api/calendar-sync",
       "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/voice-cron",
+      "schedule": "0 13 * * 0,1"
+    },
+    {
+      "path": "/api/voice-cron/retry",
+      "schedule": "0 14 * * 0,1"
     }
   ],
   "headers": [

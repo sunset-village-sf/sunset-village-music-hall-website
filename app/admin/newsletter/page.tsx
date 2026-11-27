@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { VoiceComposer } from '@/components/internal/admin/voice-composer'
+import { VoiceSchedule } from '@/components/internal/admin/voice-schedule'
 import { EmailPreview } from '@/components/internal/admin/email-preview'
 import { NoteEditor, noteHint } from '@/components/internal/admin/note-editor'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -260,7 +261,10 @@ export default function NewsletterPage() {
               <ToggleGroupItem value="announcement">One-off announcement</ToggleGroupItem>
             </ToggleGroup>
             {mode === 'voice' ? (
-              <VoiceComposer active={active.length} onSent={past.reload} />
+              <>
+                <VoiceSchedule />
+                <VoiceComposer active={active.length} onSent={past.reload} />
+              </>
             ) : (
               <Composer setup={me} active={active.length} onSent={past.reload} />
             )}
