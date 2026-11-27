@@ -274,7 +274,8 @@ export function EventForm({
           onChange={(flyer) => setD({ ...d, flyer })}
           enabled={setup.uploads}
           name={d.title ?? ''}
-          hint="Shown on the event’s own page. A photo from your phone is fine."
+          hint="Use the same 4:5 image you post on Instagram (1080×1350 is ideal). It’s shown whole on the event card, the event’s page and the home page."
+          poster
         />
       </Panel>
 
