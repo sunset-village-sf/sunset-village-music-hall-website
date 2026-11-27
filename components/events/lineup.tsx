@@ -1,5 +1,7 @@
-// The event page's lineup: who's playing, headliner first, with links to
-// each artist's Instagram, Facebook and website. Renders nothing without artists.
+// The event page's lineup: who's playing, headliner first, with their photo
+// and bio when we have them, and links to each artist's Instagram, Facebook
+// and website. Renders nothing without artists.
+import Image from 'next/image'
 import type { Artist } from '@/lib/artists'
 import { instagramUrl, websiteLabel } from '@/lib/artists'
 import { Badge } from '@/components/ui/badge'
@@ -20,15 +22,30 @@ export function Lineup({ artists }: { artists?: Artist[] }) {
       </h2>
       <ul className="mt-4 divide-y divide-border">
         {list.map((a) => (
-          <li key={a.name} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3.5 first:pt-0 last:pb-0">
-            <span className="flex flex-wrap items-center gap-2.5">
-              <span className="text-lg leading-snug font-bold">{a.name}</span>
-              {a.headliner && list.length > 1 && (
-                <Badge tone="yellow" size="sm">
-                  Headliner
-                </Badge>
+          <li key={a.name} className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 py-3.5 first:pt-0 last:pb-0">
+            <div className="flex min-w-0 flex-[999_1_280px] items-start gap-4">
+              {a.photo && (
+                <Image
+                  src={a.photo}
+                  alt={a.name}
+                  width={72}
+                  height={72}
+                  sizes="72px"
+                  className="size-18 shrink-0 rounded-sm border-2 border-ink object-cover"
+                />
               )}
-            </span>
+              <div className="flex min-w-0 flex-col gap-1">
+                <span className="flex flex-wrap items-center gap-2.5">
+                  <span className="text-lg leading-snug font-bold">{a.name}</span>
+                  {a.headliner && list.length > 1 && (
+                    <Badge tone="yellow" size="sm">
+                      Headliner
+                    </Badge>
+                  )}
+                </span>
+                {a.bio && <p className="text-base whitespace-pre-line text-ink-2">{a.bio}</p>}
+              </div>
+            </div>
             {(a.instagram || a.facebook || a.website) && (
               <span className="flex flex-wrap gap-x-5 gap-y-1">
                 {a.instagram && (

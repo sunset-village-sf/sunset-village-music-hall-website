@@ -131,6 +131,26 @@ const schema = [
   `alter table events add column if not exists artists jsonb not null default '[]'`,
   // Who saved an event last, for the "someone else changed this" screen in the admin.
   `alter table events add column if not exists updated_by text`,
+  // Links emailed to an artist so they can send their own name, bio, photo
+  // and links. Only a hash of the link's secret is stored. status: sent →
+  // submitted (they filled the form; can still edit) → approved or discarded
+  // by an admin; or replaced (a newer link went out) / revoked.
+  `create table if not exists artist_links (
+    id serial primary key,
+    token_hash text not null unique,
+    event_id text not null references events(id) on delete cascade,
+    artist_name text not null,
+    email text not null,
+    status text not null default 'sent',
+    created_at timestamptz not null default now(),
+    created_by text,
+    expires_at timestamptz not null,
+    submitted_at timestamptz,
+    submission jsonb,
+    reviewed_at timestamptz,
+    reviewed_by text
+  )`,
+  `create index if not exists artist_links_event on artist_links (event_id)`,
   `alter table bookings add column if not exists org text`,
   `alter table bookings add column if not exists phone text`,
   `alter table bookings add column if not exists backup_date text`,

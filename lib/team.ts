@@ -9,12 +9,13 @@ export const ROLES: { value: Role; label: string }[] = [
   { value: 'member', label: 'Member' },
 ]
 
-export type AlertKind = 'hall' | 'leasing' | 'tickets' | 'backup'
+export type AlertKind = 'hall' | 'leasing' | 'tickets' | 'artists' | 'backup'
 
 export const ALERT_KINDS: { value: AlertKind; label: string }[] = [
   { value: 'hall', label: 'Hall requests' },
   { value: 'leasing', label: 'Leasing inquiries' },
   { value: 'tickets', label: 'Ticket sales' },
+  { value: 'artists', label: 'Artist info to review' },
   { value: 'backup', label: 'Weekly backup' },
 ]
 

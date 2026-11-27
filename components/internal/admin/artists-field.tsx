@@ -1,19 +1,23 @@
 'use client'
 
 // The lineup editor in the event form: any number of artists, each with a
-// name, Instagram, Facebook and website, one optionally marked as headliner.
+// name, Instagram, Facebook, website, a short bio and a photo, one optionally
+// marked as headliner.
 //
 // Made for fast entry: type a name, press Enter for the next row. Names used
-// at earlier events are suggested, and picking one fills in their socials.
+// at earlier events are suggested, and picking one fills in their socials,
+// bio and photo.
 // Pasted links are tidied to a username / page link / full URL when you leave
 // the field, with a "Check" link to make sure it's the right account.
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { ChevronDown, ChevronUp, ExternalLink, Plus, Star, X } from 'lucide-react'
-import { MAX_ARTISTS, facebookUrl, instagramHandle, instagramUrl, websiteUrl, type Artist } from '@/lib/artists'
+import { MAX_ARTISTS, MAX_BIO, facebookUrl, instagramHandle, instagramUrl, websiteUrl, type Artist } from '@/lib/artists'
 import { EmptyState, FormField } from '@/components/internal/internal-ui'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { ImagePicker } from './image-picker'
 import { Toggle } from '@/components/ui/toggle'
 import { cn } from '@/lib/utils'
 
@@ -48,13 +52,15 @@ export function firstBadSocial(artists: ArtistDraft[]): string | null {
 /** Tidy every social link before saving (the API checks them too). */
 export const tidyArtists = (artists: ArtistDraft[]): Artist[] =>
   artists
-    .filter((a) => a.name.trim() || a.instagram || a.facebook || a.website)
+    .filter((a) => a.name.trim() || a.instagram || a.facebook || a.website || a.bio?.trim() || a.photo)
     .map(({ key: _key, ...a }) => ({
       ...a,
       name: a.name.trim(),
       instagram: a.instagram ? (instagramHandle(a.instagram) ?? a.instagram) : undefined,
       facebook: a.facebook ? (facebookUrl(a.facebook) ?? a.facebook) : undefined,
       website: a.website ? (websiteUrl(a.website) ?? a.website) : undefined,
+      bio: a.bio?.trim() || undefined,
+      photo: a.photo || undefined,
     }))
 
 export function ArtistsField({
@@ -62,6 +68,7 @@ export function ArtistsField({
   onChange,
   known,
   showErrors,
+  uploads = false,
 }: {
   value: ArtistDraft[]
   onChange: (next: ArtistDraft[]) => void
@@ -69,6 +76,8 @@ export function ArtistsField({
   known: Artist[]
   /** Set after a save attempt, so every bad link shows its message. */
   showErrors: boolean
+  /** Image storage is set up, so photos can be uploaded. */
+  uploads?: boolean
 }) {
   const [left, setLeft] = useState<Set<string>>(new Set()) // fields the user has left at least once
   const [focusId, setFocusId] = useState<string | null>(null)
@@ -95,8 +104,8 @@ export function ArtistsField({
   function fromKnown(a: ArtistDraft, name: string): Partial<Artist> {
     const match = byName.get(name.trim().toLowerCase())
     const fill: Partial<Artist> = {}
-    for (const f of SOCIALS) if (match && !a[f] && match[f]) fill[f] = match[f]
-    if (Object.keys(fill).length) setAnnounce(`Filled in ${match!.name}’s links from an earlier event.`)
+    for (const f of [...SOCIALS, 'bio', 'photo'] as const) if (match && !a[f] && match[f]) fill[f] = match[f]
+    if (Object.keys(fill).length) setAnnounce(`Filled in ${match!.name}’s details from an earlier event.`)
     return fill
   }
 
@@ -319,6 +328,32 @@ export function ArtistsField({
                       aria-invalid={Boolean(err('website'))}
                     />
                   </FormField>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:pl-10">
+                  <FormField
+                    label="Bio (optional)"
+                    htmlFor={`${a.key}-bio`}
+                    hint={`Shown in the event page’s lineup. ${(a.bio ?? '').length}/${MAX_BIO}`}
+                  >
+                    <Textarea
+                      density="compact"
+                      id={`${a.key}-bio`}
+                      rows={3}
+                      maxLength={MAX_BIO}
+                      value={a.bio ?? ''}
+                      onChange={(e) => update(a.key, { bio: e.target.value })}
+                    />
+                  </FormField>
+                  <ImagePicker
+                    label="Photo (optional)"
+                    noun="photo"
+                    value={a.photo}
+                    onChange={(photo) => update(a.key, { photo })}
+                    enabled={uploads}
+                    name={a.name}
+                    folder="artists"
+                    thumb
+                  />
                 </div>
               </li>
             )
