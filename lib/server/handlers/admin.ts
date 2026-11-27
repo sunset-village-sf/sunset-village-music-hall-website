@@ -374,7 +374,35 @@ function cleanArtists(v: unknown): Artist[] {
   return out
 }
 
-async function saveEvent(b: Body) {
+// Columns an admin edits, in the order the insert/update statements use, with
+// the form's label (for the "you both changed this" screen) and the draft key
+// the form uses for it.
+const EVENT_FIELDS = [
+  ['title', 'title', 'Event name'],
+  ['date', 'date', 'Date'],
+  ['time', 'time', 'Time'],
+  ['venue', 'venue', 'Where'],
+  ['summary', 'summary', 'Short description'],
+  ['details', 'details', 'Full description'],
+  ['price', 'price', 'Price shown'],
+  ['ticket_url', 'ticketUrl', 'Outside ticket link'],
+  ['flyer', 'flyer', 'Flyer'],
+  ['ticket_price_cents', 'ticketPrice', 'Online ticket price'],
+  ['capacity', 'capacity', 'Tickets available online'],
+  ['category', 'category', 'Category'],
+  ['kind', 'kind', 'Kind line'],
+  ['subtitle', 'subtitle', 'Subtitle'],
+  ['cta', 'cta', 'Button label'],
+  ['start_time', 'startTime', 'Start time'],
+  ['end_time', 'endTime', 'End time'],
+  ['display', 'display', 'Where it shows'],
+  ['artists', 'artists', 'Lineup'],
+] as const
+type EventColumn = (typeof EVENT_FIELDS)[number][0]
+type EventValues = Record<EventColumn, unknown>
+
+/** Check and tidy the form's fields into column values. */
+function parseEvent(b: Body): EventValues {
   const date = need(opt(b.date, 10), 'Date')
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new BadRequest('Date must look like 2026-10-31')
   const title = need(opt(b.title, 200), 'Title')
@@ -394,44 +422,130 @@ async function saveEvent(b: Body) {
   const capText = opt(b.capacity, 6)
   const capacity = capText === null ? null : Math.floor(Number(capText))
   if (capacity !== null && !(capacity >= 1 && capacity <= 10000)) throw new BadRequest('Capacity must be a number of tickets')
-  const fields = [
+  return {
     title,
     date,
-    opt(b.time, 100),
-    opt(b.venue, 100) ?? 'Music Hall',
-    need(opt(b.summary, 500), 'Short description'),
-    opt(b.details, 5000),
-    opt(b.price, 50),
-    ticketUrl,
-    opt(b.flyer, 500),
-    ticketPrice,
+    time: opt(b.time, 100),
+    venue: opt(b.venue, 100) ?? 'Music Hall',
+    summary: need(opt(b.summary, 500), 'Short description'),
+    details: opt(b.details, 5000),
+    price: opt(b.price, 50),
+    ticket_url: ticketUrl,
+    flyer: opt(b.flyer, 500),
+    ticket_price_cents: ticketPrice,
     capacity,
-    CATEGORIES.includes(b.category) ? b.category : 'music',
-    opt(b.kind, 100),
-    opt(b.subtitle, 200),
-    opt(b.cta, 40),
-    startTime,
-    endTime,
-    cleanDisplay(b.display),
-    JSON.stringify(cleanArtists(b.artists)),
-  ]
-  // Existing events keep their id so their /events/<id> link never breaks.
-  if (b.id) {
-    const rows = await query(
-      `update events set title=$2, date=$3, time=$4, venue=$5, summary=$6, details=$7, price=$8,
-         ticket_url=$9, flyer=$10, ticket_price_cents=$11, capacity=$12, category=$13, kind=$14, subtitle=$15,
-         cta=$16, start_time=$17, end_time=$18, display=$19, artists=$20, sample=false, updated_at=now() where id=$1 returning *`,
-      [str(b.id), ...fields],
-    )
-    if (!rows.length) throw new BadRequest('That event no longer exists')
-    return withCalendar(rows[0])
+    category: CATEGORIES.includes(b.category) ? b.category : 'music',
+    kind: opt(b.kind, 100),
+    subtitle: opt(b.subtitle, 200),
+    cta: opt(b.cta, 40),
+    start_time: startTime,
+    end_time: endTime,
+    display: cleanDisplay(b.display),
+    artists: cleanArtists(b.artists),
   }
-  const id = await uniqueId('events', slugify(`${title} ${date.slice(5)}`))
+}
+
+const toParams = (v: EventValues) => EVENT_FIELDS.map(([col]) => (col === 'artists' ? JSON.stringify(v.artists) : v[col]))
+
+/** A saved row in the form's shape (prices in dollars), as the form sends it. */
+export const rowToDraft = (r: Record<string, any>) => ({
+  ...eventFromRow(r),
+  ticketPrice: r.ticket_price_cents ? String(r.ticket_price_cents / 100) : '',
+  capacity: r.capacity ? String(r.capacity) : '',
+})
+
+// Same value? Blank, null and missing count as equal; objects compare with keys sorted.
+const canon = (v: unknown): unknown =>
+  v === undefined || v === null || v === ''
+    ? null
+    : Array.isArray(v)
+      ? v.map(canon)
+      : typeof v === 'object'
+        ? Object.fromEntries(
+            Object.keys(v as object)
+              .sort()
+              .map((k) => [k, canon((v as Record<string, unknown>)[k])])
+              .filter(([, x]) => x !== null),
+          )
+        : v
+const same = (a: unknown, b: unknown) => JSON.stringify(canon(a)) === JSON.stringify(canon(b))
+
+/** Two people changed the same fields of an event: the form shows both versions to choose from. */
+export class Conflict extends Error {
+  constructor(public data: Record<string, unknown>) {
+    super('Someone else changed this event while you were editing it.')
+  }
+}
+
+/**
+ * Save an event. Edits are merged field by field against what the form
+ * started from (`b.base`), so changes someone else saved in the meantime
+ * aren't overwritten: fields only you changed are saved, fields only they
+ * changed are kept, and fields you both changed to different values stop the
+ * save with a Conflict listing both versions.
+ */
+async function saveEvent(b: Body, me: Admin) {
+  const mine = parseEvent(b)
+  if (b.id) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const [row] = await query(`select *, updated_at::text as version from events where id = $1`, [str(b.id)])
+      if (!row) throw new BadRequest('That event no longer exists')
+      let theirs: EventValues
+      try {
+        theirs = parseEvent(rowToDraft(row))
+      } catch {
+        theirs = Object.fromEntries(EVENT_FIELDS.map(([col]) => [col, row[col]])) as EventValues
+      }
+      // Without a base (an old open tab from before this change), there's
+      // nothing to merge against: treat everything as "mine", as before.
+      const base = b.base && typeof b.base === 'object' ? parseEvent(b.base as Body) : theirs
+      // Choices from the "you both changed this" screen, if it was made
+      // against what's saved now (not an even newer save).
+      const picks: Record<string, unknown> =
+        b.resolve && typeof b.resolve === 'object' && b.resolve.version === row.version ? b.resolve : {}
+      const merged = { ...mine }
+      const clashes: { key: string; label: string }[] = []
+      const kept: string[] = []
+      for (const [col, key, label] of EVENT_FIELDS) {
+        if (same(mine[col], base[col])) {
+          merged[col] = theirs[col]
+          if (!same(theirs[col], base[col])) kept.push(label)
+        } else if (!same(theirs[col], base[col]) && !same(theirs[col], mine[col])) {
+          if (picks[key] === 'theirs') merged[col] = theirs[col]
+          else if (picks[key] !== 'mine') clashes.push({ key, label })
+        }
+      }
+      if (clashes.length) {
+        throw new Conflict({
+          conflicts: clashes,
+          kept,
+          current: rowToDraft(row),
+          version: row.version,
+          updatedBy: row.updated_by ?? null,
+          updatedAt: row.updated_at,
+        })
+      }
+      const rows = await query(
+        `update events set title=$3, date=$4, time=$5, venue=$6, summary=$7, details=$8, price=$9,
+           ticket_url=$10, flyer=$11, ticket_price_cents=$12, capacity=$13, category=$14, kind=$15, subtitle=$16,
+           cta=$17, start_time=$18, end_time=$19, display=$20, artists=$21, sample=false, updated_at=now(), updated_by=$22
+         where id=$1 and updated_at::text=$2 returning *`,
+        [str(b.id), row.version, ...toParams(merged), me.name],
+      )
+      // Saved by someone else between the read and the write: merge again.
+      if (rows.length) {
+        const saved = await withCalendar(rows[0])
+        return kept.length ? { ...saved, keptFrom: { by: row.updated_by ?? null, fields: kept } } : saved
+      }
+    }
+    throw new BadRequest('This event is being edited by someone else right now. Try saving again.')
+  }
+  const id = await uniqueId('events', slugify(`${mine.title} ${String(mine.date).slice(5)}`))
   const rows = await query(
     `insert into events (id, title, date, time, venue, summary, details, price, ticket_url, flyer, ticket_price_cents, capacity,
-       category, kind, subtitle, cta, start_time, end_time, display, artists)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) returning *`,
-    [id, ...fields],
+       category, kind, subtitle, cta, start_time, end_time, display, artists, updated_by)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) returning *`,
+    [id, ...toParams(mine), me.name],
   )
   return withCalendar(rows[0])
 }
@@ -758,7 +872,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
     } else {
       switch (action) {
         case 'event-save':
-          return ok(await saveEvent(b))
+          return ok(await saveEvent(b, me))
         case 'event-delete': {
           await query(`delete from events where id = $1`, [str(b.id)])
           const calendar = hasCalendar() ? ((await deleteCalendarEvent(str(b.id))) ? 'synced' : 'failed') : 'off'
@@ -880,6 +994,7 @@ export default async function handler(req: VercelReq, res: VercelRes) {
     return res.status(404).json({ error: 'Unknown action' })
   } catch (e) {
     if (e instanceof BadRequest) return res.status(400).json({ error: e.message })
+    if (e instanceof Conflict) return res.status(409).json({ error: e.message, ...e.data })
     if (e instanceof Forbidden) return res.status(403).json({ error: e.message })
     console.error(`admin ${action} failed`, e)
     return res.status(500).json({ error: 'Something went wrong. Try again.' })
