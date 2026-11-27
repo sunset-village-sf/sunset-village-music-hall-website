@@ -4,7 +4,7 @@
 // stores cents.
 
 import { useState, type FormEvent } from 'react'
-import { postJson, type Setup } from '@/lib/admin/api'
+import { ConflictError, postJson, type Setup } from '@/lib/admin/api'
 import { ALL_PLACES, DISPLAY_PLACES, type DisplayPlace, type EventCategory, type VillageEvent } from '@/lib/data/events'
 import { CATEGORIES, categoryLabel } from '@/components/brand/categories'
 import { ErrorNote, FormField, Panel } from '@/components/internal/internal-ui'
@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ImagePicker } from './image-picker'
 import { ArtistsField, firstBadSocial, tidyArtists, toArtistDrafts, type ArtistDraft } from './artists-field'
 import type { Artist } from '@/lib/artists'
+import { EditConflict, type EventConflict, type Pick } from './edit-conflict'
 
 export type EventDraft = Omit<Partial<VillageEvent>, 'ticketPrice' | 'capacity' | 'artists'> & {
   ticketPrice?: string
@@ -47,13 +48,18 @@ export function EventForm({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [showArtistErrors, setShowArtistErrors] = useState(false)
+  // What the form started from. The server merges against it, so fields you
+  // didn't touch keep anyone else's newer changes.
+  const [base] = useState(() => (initial.id ? { ...initial, artists: tidyArtists(initial.artists ?? []) } : undefined))
+  const [conflict, setConflict] = useState<EventConflict | null>(null)
+  const [picks, setPicks] = useState<Record<string, Pick>>({})
   const set = (k: keyof EventDraft) => (e: { target: { value: string } }) => setD({ ...d, [k]: e.target.value })
   const display = d.display ?? ALL_PLACES
   const toggle = (place: DisplayPlace, on: boolean) =>
     setD({ ...d, display: ALL_PLACES.filter((p) => (p === place ? on : display.includes(p))) })
 
-  async function save(e: FormEvent) {
-    e.preventDefault()
+  async function save(e?: FormEvent) {
+    e?.preventDefault()
     const bad = firstBadSocial(d.artists ?? [])
     if (bad) {
       setShowArtistErrors(true)
@@ -64,9 +70,18 @@ export function EventForm({
     setBusy(true)
     setError('')
     try {
-      onDone(await postJson<VillageEvent>('event-save', { ...d, artists: tidyArtists(d.artists ?? []) }))
+      const resolve = conflict ? { ...picks, version: conflict.version } : undefined
+      onDone(await postJson<VillageEvent>('event-save', { ...d, artists: tidyArtists(d.artists ?? []), base, resolve }))
     } catch (err) {
-      setError((err as Error).message)
+      if (err instanceof ConflictError) {
+        const next = err.data as EventConflict
+        // Keep choices for fields that still clash; anything new needs a fresh pick.
+        setPicks((p) => Object.fromEntries(next.conflicts.filter((c) => p[c.key]).map((c) => [c.key, p[c.key]])))
+        setConflict(next)
+        window.scrollTo(0, 0)
+      } else {
+        setError((err as Error).message)
+      }
       setBusy(false)
     }
   }
@@ -85,6 +100,16 @@ export function EventForm({
 
   return (
     <form onSubmit={save} className="flex flex-col gap-5">
+      {conflict && (
+        <EditConflict
+          conflict={conflict}
+          mine={d}
+          picks={picks}
+          onPick={(key, pick) => setPicks({ ...picks, [key]: pick })}
+          onSave={() => save()}
+          busy={busy}
+        />
+      )}
       <Panel title="The event">
         <div className="flex flex-col gap-4">
           <FormField label="Event name" htmlFor="ev-title">

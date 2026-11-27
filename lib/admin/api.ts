@@ -6,6 +6,16 @@ import type { AlertKind, Role } from '@/lib/team'
 
 export class SignedOut extends Error {}
 
+/** A save clashed with someone else's: the server's details (both versions) ride along. */
+export class ConflictError<T = Record<string, unknown>> extends Error {
+  constructor(
+    message: string,
+    public data: T,
+  ) {
+    super(message)
+  }
+}
+
 async function call<T>(action: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api/admin?action=${action}`, {
     method: body === undefined ? 'GET' : 'POST',
@@ -16,6 +26,7 @@ async function call<T>(action: string, body?: unknown): Promise<T> {
   if (!res) throw new Error('Can’t reach the server. Check your internet connection.')
   const data = await res.json().catch(() => ({}))
   if (res.status === 401 && action !== 'login') throw new SignedOut()
+  if (res.status === 409) throw new ConflictError(data.error, data)
   if (!res.ok) throw new Error(data.error ?? 'Something went wrong. Try again.')
   return data as T
 }

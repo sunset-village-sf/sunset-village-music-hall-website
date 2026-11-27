@@ -60,7 +60,10 @@ export default function EventsPage() {
   const { me, signedOut } = useAdmin()
   const { data, error, reload } = useLoad(() => getJson<VillageEvent[]>('events'), signedOut)
   const [editing, setEditing] = useState<EventDraft | null>(null)
-  const [saved, setSaved] = useState<(VillageEvent & { calendar?: 'synced' | 'failed' | 'off' }) | null>(null)
+  const [saved, setSaved] = useState<
+    | (VillageEvent & { calendar?: 'synced' | 'failed' | 'off'; keptFrom?: { by: string | null; fields: string[] } })
+    | null
+  >(null)
   const [syncNote, setSyncNote] = useState('')
   const [syncing, setSyncing] = useState(false)
 
@@ -106,9 +109,14 @@ export default function EventsPage() {
 
   const upcoming = data ? upcomingEvents(data) : []
   const past = data ? pastEvents(data) : []
-  const edit = (e: VillageEvent) => {
+  // Open the latest saved version, not the copy this page loaded (which can be
+  // days old in a tab left open). The save still merges if it changes later.
+  const edit = async (e: VillageEvent) => {
     setSaved(null)
-    setEditing(toDraft(e))
+    const fresh = await getJson<VillageEvent[]>('events')
+      .then((all) => all.find((x) => x.id === e.id))
+      .catch(() => undefined)
+    setEditing(toDraft(fresh ?? e))
   }
   const copy = (e: VillageEvent) => {
     // A duplicate is a new event: no id, no date, so nothing is overwritten.
@@ -143,6 +151,8 @@ export default function EventsPage() {
             See it on the site ↗
           </a>
           {saved.calendar === 'synced' && ' Google Calendar is updated too.'}
+          {saved.keptFrom &&
+            ` ${saved.keptFrom.by ?? 'Someone else'} had also changed ${saved.keptFrom.fields.join(', ')} while you were editing; those changes were kept.`}
         </Alert>
       )}
       {saved?.calendar === 'failed' && (
