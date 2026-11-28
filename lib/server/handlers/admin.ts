@@ -46,7 +46,7 @@ import { noteText } from '@/lib/note-markup'
 import { loadContent } from '../content'
 import { todayISO, upcoming } from '@/lib/events'
 import { str, opt, clientIp, isEmail, type VercelReq, type VercelRes } from '../http'
-import { ALL_PLACES, showsOn, type DisplayPlace, type VillageEvent } from '@/lib/data/events'
+import { ALL_PLACES, MAX_GALLERY, showsOn, type DisplayPlace, type GalleryPhoto, type VillageEvent } from '@/lib/data/events'
 import { MAX_ARTISTS, MAX_BIO, facebookUrl, instagramHandle, isUploadedImage, websiteUrl, type Artist } from '@/lib/artists'
 import { VOICE_DAYS, setSetting, voiceState } from '../voice-schedule'
 import { lineupIndex, linkArtists, listArtists, updateArtist } from '../artists'
@@ -416,6 +416,7 @@ const EVENT_FIELDS = [
   ['end_time', 'endTime', 'End time'],
   ['display', 'display', 'Where it shows'],
   ['artists', 'artists', 'Lineup'],
+  ['gallery', 'gallery', 'Photos'],
 ] as const
 type EventColumn = (typeof EVENT_FIELDS)[number][0]
 type EventValues = Record<EventColumn, unknown>
@@ -461,10 +462,28 @@ function parseEvent(b: Body): EventValues {
     end_time: endTime,
     display: cleanDisplay(b.display),
     artists: cleanArtists(b.artists),
+    gallery: cleanGallery(b.gallery),
   }
 }
 
-const toParams = (v: EventValues) => EVENT_FIELDS.map(([col]) => (col === 'artists' ? JSON.stringify(v.artists) : v[col]))
+/** The event page's photos: uploaded images only, each with an optional caption. */
+function cleanGallery(v: unknown): GalleryPhoto[] {
+  const rows = (Array.isArray(v) ? v : []) as Body[]
+  const out: GalleryPhoto[] = []
+  for (const r of rows) {
+    const url = opt(r?.url, 500)
+    if (!url) continue
+    if (!isUploadedImage(url)) throw new BadRequest('Add photos with the buttons in Photos on the event page')
+    if (out.some((p) => p.url === url)) continue
+    const caption = opt(r?.caption, 200)
+    out.push({ url, ...(caption && { caption }) })
+  }
+  if (out.length > MAX_GALLERY) throw new BadRequest(`Up to ${MAX_GALLERY} photos per event`)
+  return out
+}
+
+const toParams = (v: EventValues) =>
+  EVENT_FIELDS.map(([col]) => (col === 'artists' || col === 'gallery' ? JSON.stringify(v[col]) : v[col]))
 
 /** A saved row in the form's shape (prices in dollars), as the form sends it. */
 export const rowToDraft = (r: Record<string, any>) => ({
@@ -552,7 +571,7 @@ async function saveEvent(b: Body, me: Admin) {
       const rows = await query(
         `update events set title=$3, date=$4, time=$5, venue=$6, summary=$7, details=$8, price=$9,
            ticket_url=$10, flyer=$11, ticket_price_cents=$12, capacity=$13, category=$14, kind=$15, subtitle=$16,
-           cta=$17, start_time=$18, end_time=$19, display=$20, artists=$21, sample=false, updated_at=now(), updated_by=$22
+           cta=$17, start_time=$18, end_time=$19, display=$20, artists=$21, gallery=$22, sample=false, updated_at=now(), updated_by=$23
          where id=$1 and updated_at::text=$2 returning *`,
         [str(b.id), row.version, ...toParams(merged), me.name],
       )
@@ -568,8 +587,8 @@ async function saveEvent(b: Body, me: Admin) {
   mine.artists = await linkArtists(mine.artists as Artist[], null, me.name)
   const rows = await query(
     `insert into events (id, title, date, time, venue, summary, details, price, ticket_url, flyer, ticket_price_cents, capacity,
-       category, kind, subtitle, cta, start_time, end_time, display, artists, updated_by)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) returning *`,
+       category, kind, subtitle, cta, start_time, end_time, display, artists, gallery, updated_by)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) returning *`,
     [id, ...toParams(mine), me.name],
   )
   return withCalendar(rows[0])
