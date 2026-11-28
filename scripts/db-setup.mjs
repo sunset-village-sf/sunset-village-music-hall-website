@@ -131,6 +131,8 @@ const schema = [
   `alter table events add column if not exists artists jsonb not null default '[]'`,
   // Who saved an event last, for the "someone else changed this" screen in the admin.
   `alter table events add column if not exists updated_by text`,
+  // Extra photos for an event's page, in order: [{url, caption?}].
+  `alter table events add column if not exists gallery jsonb not null default '[]'`,
   // Links emailed to an artist so they can send their own name, bio, photo
   // and links. Only a hash of the link's secret is stored. status: sent →
   // submitted (they filled the form; can still edit) → approved or discarded

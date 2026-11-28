@@ -125,6 +125,18 @@ function eventCard(f: Frame, e: VillageEvent) {
     ? `<td class="sv-flyer" width="92" style="width:92px;padding-left:16px;vertical-align:top">
 <a href="${esc(href)}">${`<img src="${esc(abs(e.flyer))}" width="92" alt="" style="display:block;width:92px;height:auto;border:2px solid ${c('ink')};border-radius:10px">`}</a></td>`
     : ''
+  // Up to two of the event's photos under the card, resized by the site (originals can be several MB).
+  const shots = (e.gallery ?? []).slice(0, 2)
+  const photos = shots.length
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:14px"><tr>
+${shots
+  .map(
+    (p, i) => `<td width="50%" style="width:50%;vertical-align:top;${i ? 'padding-left:6px' : 'padding-right:6px'}">
+<a href="${esc(href)}"><img src="${esc(`${SITE_URL}/_next/image?url=${encodeURIComponent(p.url)}&w=640&q=75`)}" width="250" alt="${esc(p.caption ?? '')}" style="display:block;width:100%;max-width:250px;height:auto;border:2px solid ${c('ink')};border-radius:10px"></a></td>`,
+  )
+  .join('\n')}${shots.length === 1 ? '<td width="50%" style="width:50%"></td>' : ''}
+</tr></table>`
+    : ''
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${c('paper')};border:2px solid ${c('ink')};border-radius:24px;margin:0 0 14px">
 <tr><td style="padding:16px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
@@ -138,6 +150,7 @@ ${meta ? `<div style="font-family:${mono};font-size:13px;line-height:1.6;color:$
 </td>
 ${flyer}
 </tr></table>
+${photos}
 </td></tr></table>`
 }
 

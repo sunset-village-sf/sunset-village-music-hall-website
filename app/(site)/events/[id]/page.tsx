@@ -9,6 +9,7 @@ import { Facts, Section } from '@/components/layout/section'
 import { PosterArt } from '@/components/events/poster-art'
 import { TicketBox } from '@/components/events/ticket-box'
 import { Lineup, billing } from '@/components/events/lineup'
+import { EventGallery } from '@/components/events/event-gallery'
 import { SaveShare } from '@/components/events/save-share'
 import { eventPageUrl, googleCalendarLink } from '@/lib/event-calendar'
 import { loadContent } from '@/lib/server/content'
@@ -128,6 +129,7 @@ export default async function EventPage({ params }: Props) {
         </aside>
         {body && body !== lede && <p className="max-w-160 text-lede whitespace-pre-line">{body}</p>}
         <Lineup artists={event.artists} />
+        <EventGallery photos={event.gallery} title={event.title} />
         </div>
       </Section>
     </>

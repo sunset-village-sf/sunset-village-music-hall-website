@@ -20,6 +20,7 @@ import type { Artist } from '@/lib/artists'
 import { EditConflict, type EventConflict, type Pick } from './edit-conflict'
 import { ArtistLinksPanel } from './artist-links-panel'
 import { ShowFilesPanel } from './show-files-panel'
+import { GalleryPanel } from './gallery-panel'
 import { getJson } from '@/lib/admin/api'
 import { useLoad } from '@/lib/admin/use-load'
 import { isPreviewable, type Asset } from '@/lib/assets'
@@ -342,6 +343,15 @@ export function EventForm({
           choices={flyerChoices}
         />
       </Panel>
+
+      <GalleryPanel
+        value={d.gallery ?? []}
+        onChange={(gallery) => setD({ ...d, gallery })}
+        eventId={base?.id}
+        files={files.data ?? []}
+        onUploaded={files.reload}
+        uploads={setup.uploads}
+      />
 
       <ErrorNote>{error}</ErrorNote>
       <div className="flex flex-wrap items-center gap-2">

@@ -29,6 +29,22 @@ function show(key: string, v: unknown): React.ReactNode {
   if (v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0)) {
     return key === 'display' ? 'Nowhere (draft)' : <span className="text-ink-2">(blank)</span>
   }
+  if (key === 'gallery') {
+    const photos = v as { url: string; caption?: string }[]
+    return (
+      <span className="flex flex-col gap-1.5">
+        <span>
+          {photos.length} {photos.length === 1 ? 'photo' : 'photos'}
+        </span>
+        <span className="flex flex-wrap gap-1">
+          {photos.slice(0, 8).map((p) => (
+            // eslint-disable-next-line @next/next/no-img-element -- uploaded blob URL
+            <img key={p.url} src={p.url} alt={p.caption ?? ''} className="size-10 rounded-xs object-cover" />
+          ))}
+        </span>
+      </span>
+    )
+  }
   if (key === 'artists') {
     return (v as { name?: string; headliner?: boolean }[])
       .filter((a) => a.name)

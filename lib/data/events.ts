@@ -55,8 +55,19 @@ export interface VillageEvent {
   display?: DisplayPlace[]
   /** Who's playing, in billing order, with their socials. */
   artists?: Artist[]
+  /** Extra photos for the event's page (promo before, the night after), in order. */
+  gallery?: GalleryPhoto[]
   sample?: boolean
 }
+
+export interface GalleryPhoto {
+  /** An uploaded image (the show's files in the asset library). */
+  url: string
+  /** One optional line, e.g. "Sal and I live, Nov 20" or "Photo: Jane Doe". Also the image's description. */
+  caption?: string
+}
+
+export const MAX_GALLERY = 30
 
 export const events: VillageEvent[] = [
   {
